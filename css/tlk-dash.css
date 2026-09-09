@@ -23,6 +23,11 @@
     background-color: lightgray;
 }
 
+.table-container {
+    width: 100%;
+    overflow-x: auto;
+}
+
 @media (max-width: 768px){
     .dash-container__header, .dash-container__overview {
         flex-direction: column;
