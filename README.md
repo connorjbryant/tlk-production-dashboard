@@ -14,20 +14,18 @@ Google Sheets is the source of truth. You upload a QuickBooks CSV, Apps Script b
 
 ## Data flow
 
-```mermaid
-flowchart LR
-  A[1. QuickBooks CSV] --> B[2. Google Sheet "Raw"]
-  B --> C[3. buildCleanSchedule]
-  C --> D[4. Google Sheet "Clean Schedule"]
-  D --> E[5. Apps Script doGet]
-  E --> F[6. JSON]
-  F --> G[7. WordPress get_schedule_data]
-  G --> H[8. tlk_sync_schedule_to_database]
-  H --> I[9. wp_tlk_schedule]
-  I --> J[10. tlk_get_saved_schedule]
-  J --> K[11. $schedule_rows]
-  K --> L[12. WordPress HTML table]
-```
+1. QuickBooks CSV
+2. Google Sheet — **Raw**
+3. `buildCleanSchedule()` processes the raw data
+4. Google Sheet — **Clean Schedule**
+5. `doGet()` reads the Clean Schedule
+6. Apps Script outputs the data as **JSON**
+7. WordPress `get_schedule_data()` retrieves the JSON
+8. `tlk_sync_schedule_to_database()` saves the data to WordPress
+9. Data is stored in **`wp_tlk_schedule`**
+10. `tlk_get_saved_schedule()` reads the WordPress database table
+11. Results are stored in **`$schedule_rows`**
+12. WordPress **HTML table** displays the data
 
 In short: Visit the dashboard and WordPress contacts Google. Then the WordPress table is rebuilt and the plugin displays the table.
 
