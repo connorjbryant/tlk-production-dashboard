@@ -76,3 +76,44 @@ function tlk_change_page_template($template){
 
     return $template;
 }
+
+/**
+ * Connects to the Google Apps Script Web App, follows security redirects, and caches data.
+ */
+function get_schedule_data() {
+    $web_app_url = 'https://script.google.com/macros/s/AKfycbyzOP1F1WwajHXYC2t3pv21jCs6hIokKcvHcdZzi0wGuffbLnvwY-PqC6hyhm6clZmptw/exec';
+    
+    $cache_key = 'clean_schedule_cache_data';
+    $data      = get_transient($cache_key);
+    
+    // If cache is empty or expired, run a live background fetch
+    if (false === $data) {
+        // Apps Script utilizes structural HTTP redirects, timeout and redirection configs are mandatory
+        $response = wp_remote_get($web_app_url, array(
+            'timeout'     => 15,
+            'redirection' => 5
+        ));
+        
+        // Handle network or script hosting errors gracefully
+        if (is_wp_error($response)) {
+            error_log('Bespoke Sync Failure: ' . $response->get_error_message());
+            return array();
+        }
+        
+        $json_string = wp_remote_retrieve_body($response);
+        $data        = json_decode($json_string, true);
+        
+        // Ensure parsing succeeded and we have a valid key-value array structure
+        if (!is_array($data) || isset($data['error'])) {
+            if (isset($data['error'])) {
+                error_log('Google App Script Error: ' . $data['error']);
+            }
+            return array();
+        }
+        
+        // Cache the processed data array locally for 15 minutes to preserve site load speeds
+        set_transient($cache_key, $data, 15 * MINUTE_IN_SECONDS);
+    }
+    
+    return $data;
+}
