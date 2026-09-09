@@ -17,7 +17,7 @@ $schedule_rows = tlk_get_saved_schedule();
 ?>
 
 <main>
-    <!-- <div class="table-container">
+    <div class="table-container">
         <?php
             if (empty($schedule_rows) || !is_array($schedule_rows)) : ?>
             <p>No schedule data available</p>
@@ -52,7 +52,7 @@ $schedule_rows = tlk_get_saved_schedule();
             </tbody>
         </table>
         <?php endif; ?>
-    </div> -->
+    </div>
 </main>
 
 <?php get_footer(); ?>
