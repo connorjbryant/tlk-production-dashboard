@@ -16,7 +16,21 @@ $schedule_rows = tlk_get_saved_schedule();
 // echo '</pre>';
 ?>
 
-<main>
+<main class="dash-container">
+    <div class="dash-container__header">
+        <div>
+            <h1>Production Dashboard</h1>
+        </div>
+        <div>
+            <p>Month</p>
+        </div>
+    </div>
+    <div class="dash-container__overview">
+        <div>One</div>
+        <div>Two</div>
+        <div>Three</div>
+        <div>Four</div>
+    </div>
     <div class="table-container">
         <?php
             if (empty($schedule_rows) || !is_array($schedule_rows)) : ?>

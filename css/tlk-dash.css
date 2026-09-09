@@ -2,3 +2,29 @@
 .tlk-prod-dash.header-v1 .page-header .page-header-content {
     display: none;
 }
+
+.dash-container {
+    display: block;
+    width: 100%;
+    height: fit-content;
+}
+
+.dash-container__header, .dash-container__overview {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.dash-container__overview div {
+    display: flex;
+    margin: 1rem;
+    width: 100%;
+    background-color: lightgray;
+}
+
+@media (max-width: 768px){
+    .dash-container__header, .dash-container__overview {
+        flex-direction: column;
+    }
+}
