@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 1.0.2
+ * Version: 1.0.3
  * Author: Connor Bryant
  * License: GPL-2.0+
  */
@@ -81,39 +81,60 @@ function tlk_change_page_template($template){
  * Connects to the Google Apps Script Web App, follows security redirects, and caches data.
  */
 function get_schedule_data() {
-    $web_app_url = 'https://script.google.com/macros/s/AKfycbyzOP1F1WwajHXYC2t3pv21jCs6hIokKcvHcdZzi0wGuffbLnvwY-PqC6hyhm6clZmptw/exec';
-    
-    $cache_key = 'clean_schedule_cache_data';
-    $data      = get_transient($cache_key);
-    
-    // If cache is empty or expired, run a live background fetch
-    if (false === $data) {
-        // Apps Script utilizes structural HTTP redirects, timeout and redirection configs are mandatory
-        $response = wp_remote_get($web_app_url, array(
-            'timeout'     => 15,
-            'redirection' => 5
-        ));
-        
-        // Handle network or script hosting errors gracefully
-        if (is_wp_error($response)) {
-            error_log('Bespoke Sync Failure: ' . $response->get_error_message());
-            return array();
-        }
-        
-        $json_string = wp_remote_retrieve_body($response);
-        $data        = json_decode($json_string, true);
-        
-        // Ensure parsing succeeded and we have a valid key-value array structure
-        if (!is_array($data) || isset($data['error'])) {
-            if (isset($data['error'])) {
-                error_log('Google App Script Error: ' . $data['error']);
-            }
-            return array();
-        }
-        
-        // Cache the processed data array locally for 15 minutes to preserve site load speeds
-        set_transient($cache_key, $data, 15 * MINUTE_IN_SECONDS);
+    $web_app_url = 'https://script.google.com/macros/s/AKfycbyECN9HB6_V-5aIU3yVYXuVQeghscd4NJejll8vLVES2GUaHd4mfvVrH7AVoe7V7wTCDQ/exec';
+
+    // TEMP: disable cache while debugging
+    delete_transient('clean_schedule_cache_data');
+
+    $response = wp_remote_get($web_app_url, array(
+        'timeout'     => 15,
+        'redirection' => 10,
+        'headers'     => array(
+            'Accept' => 'application/json',
+        ),
+    ));
+
+    if (is_wp_error($response)) {
+        error_log(
+            'Schedule Sync WP Error: ' .
+            $response->get_error_message()
+        );
+
+        return array();
     }
-    
+
+    $status_code = wp_remote_retrieve_response_code($response);
+    $content_type = wp_remote_retrieve_header($response, 'content-type');
+    $json_string = wp_remote_retrieve_body($response);
+
+    error_log('Schedule HTTP status: ' . $status_code);
+    error_log('Schedule Content-Type: ' . $content_type);
+    error_log('Schedule raw response: ' . substr($json_string, 0, 3000));
+
+    $data = json_decode($json_string, true);
+
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        error_log(
+            'Schedule JSON decode error: ' .
+            json_last_error_msg()
+        );
+
+        return array();
+    }
+
+    if (!is_array($data)) {
+        error_log('Schedule response was not an array.');
+        return array();
+    }
+
+    if (isset($data['error'])) {
+        error_log(
+            'Google Apps Script Error: ' .
+            $data['error']
+        );
+
+        return array();
+    }
+
     return $data;
 }
