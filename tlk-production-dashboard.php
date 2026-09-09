@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 1.0.3
+ * Version: 1.0.4
  * Author: Connor Bryant
  * License: GPL-2.0+
  */
@@ -136,4 +136,158 @@ function get_schedule_data() {
     }
 
     return $data;
+}
+
+/**
+ * Create schedule table
+ */
+function tlk_create_schedule_table() {
+    global $wpdb;
+
+    $table_name      = $wpdb->prefix . 'tlk_schedule';
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $sql = "CREATE TABLE {$table_name} (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        po_number VARCHAR(100) DEFAULT '',
+        order_date VARCHAR(50) DEFAULT '',
+        customer VARCHAR(255) DEFAULT '',
+        due_date VARCHAR(50) DEFAULT '',
+        part_number VARCHAR(255) DEFAULT '',
+        qty VARCHAR(50) DEFAULT '',
+        open_qty VARCHAR(50) DEFAULT '',
+        status VARCHAR(100) DEFAULT '',
+        notes TEXT,
+        synced_at DATETIME NOT NULL,
+        PRIMARY KEY (id)
+    ) {$charset_collate};";
+
+    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+
+    dbDelta($sql);
+}
+
+register_activation_hook(__FILE__, 'tlk_create_schedule_table');
+
+
+/**
+ * Make sure table exists.
+ */
+function tlk_schedule_table_exists() {
+    global $wpdb;
+
+    $table_name = $wpdb->prefix . 'tlk_schedule';
+
+    $exists = $wpdb->get_var(
+        $wpdb->prepare(
+            'SHOW TABLES LIKE %s',
+            $table_name
+        )
+    );
+
+    if ($exists !== $table_name) {
+        tlk_create_schedule_table();
+    }
+
+    return $wpdb->get_var(
+        $wpdb->prepare(
+            'SHOW TABLES LIKE %s',
+            $table_name
+        )
+    ) === $table_name;
+}
+
+/**
+ * Sync Google spreadsheet to WordPress
+ */
+function tlk_sync_schedule_to_database() {
+    global $wpdb;
+
+    $table_name = $wpdb->prefix . 'tlk_schedule';
+
+    /*
+     * Make sure our database table actually exists.
+     */
+    if (!tlk_schedule_table_exists()) {
+        return new WP_Error(
+            'table_missing',
+            'Could not create the schedule database table. Database error: ' . $wpdb->last_error
+        );
+    }
+
+    /*
+     * Get current Google Sheet data.
+     */
+    $rows = get_schedule_data();
+
+    if (empty($rows) || !is_array($rows)) {
+        return new WP_Error(
+            'no_google_data',
+            'No schedule data was returned from Google.'
+        );
+    }
+
+    /*
+     * Google Sheet is source of truth.
+     *
+     * Remove the old WordPress copy first.
+     */
+    $deleted = $wpdb->query("TRUNCATE TABLE {$table_name}");
+
+    if ($deleted === false) {
+        return new WP_Error(
+            'truncate_failed',
+            'Could not clear schedule table: ' . $wpdb->last_error
+        );
+    }
+
+    $inserted = 0;
+
+    foreach ($rows as $row) {
+
+        $result = $wpdb->insert(
+            $table_name,
+            array(
+                'po_number'   => isset($row['P.O.']) ? $row['P.O.'] : '',
+                'order_date'  => isset($row['DATE']) ? $row['DATE'] : '',
+                'customer'    => isset($row['CUSTOMER']) ? $row['CUSTOMER'] : '',
+                'due_date'    => isset($row['DUE']) ? $row['DUE'] : '',
+                'part_number' => isset($row['PART NUMBER']) ? $row['PART NUMBER'] : '',
+                'qty'         => isset($row['QTY']) ? $row['QTY'] : '',
+                'open_qty'    => isset($row['OPEN']) ? $row['OPEN'] : '',
+                'status'      => isset($row['STATUS']) ? $row['STATUS'] : '',
+                'notes'       => isset($row['NOTES']) ? $row['NOTES'] : '',
+                'synced_at'   => current_time('mysql'),
+            )
+        );
+
+        if ($result === false) {
+            return new WP_Error(
+                'insert_failed',
+                'Database insert failed: ' . $wpdb->last_error
+            );
+        }
+
+        $inserted++;
+    }
+
+    return $inserted;
+}
+
+/**
+ * Get saved WordPress schedule
+ */
+function tlk_get_saved_schedule() {
+    global $wpdb;
+
+    $table_name = $wpdb->prefix . 'tlk_schedule';
+
+    if (!tlk_schedule_table_exists()) {
+        return array();
+    }
+
+    return $wpdb->get_results(
+        "SELECT * FROM {$table_name} ORDER BY id ASC",
+        ARRAY_A
+    );
 }
