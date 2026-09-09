@@ -15,9 +15,9 @@ Google Sheets is the source of truth. You upload a QuickBooks CSV, Apps Script b
 ## Data flow
 
 1. QuickBooks CSV
-2. Google Sheet — **Raw**
+2. Google Sheet reads **Raw** tab
 3. `buildCleanSchedule()` processes the raw data
-4. Google Sheet — **Clean Schedule**
+4. Google Sheet makes **Clean Schedule** tab
 5. `doGet()` reads the Clean Schedule
 6. Apps Script outputs the data as **JSON**
 7. WordPress `get_schedule_data()` retrieves the JSON
