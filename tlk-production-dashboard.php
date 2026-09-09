@@ -78,12 +78,11 @@ function tlk_change_page_template($template){
 }
 
 /**
- * Connects to the Google Apps Script Web App, follows security redirects, and caches data.
+ * Connects to the Google Apps Script Web App
  */
 function get_schedule_data() {
     $web_app_url = 'https://script.google.com/macros/s/AKfycbyECN9HB6_V-5aIU3yVYXuVQeghscd4NJejll8vLVES2GUaHd4mfvVrH7AVoe7V7wTCDQ/exec';
 
-    // TEMP: disable cache while debugging
     delete_transient('clean_schedule_cache_data');
 
     $response = wp_remote_get($web_app_url, array(
