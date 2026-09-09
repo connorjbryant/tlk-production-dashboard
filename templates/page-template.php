@@ -48,4 +48,3 @@ $schedule_rows = get_schedule_data();
 </main>
 
 <?php get_footer(); ?>
-
