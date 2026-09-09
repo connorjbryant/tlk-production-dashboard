@@ -1,0 +1,4 @@
+/* Removal of default page banner */
+.tlk-prod-dash.header-v1 .page-header .page-header-content {
+    display: none;
+}

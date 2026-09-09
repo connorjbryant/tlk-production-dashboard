@@ -1,37 +1,76 @@
 <?php
 /**
  * Plugin Name: TLK Production Dashboard
- * Description: Departmental production data statistics
- * Version: 1.0.0
+ * Description: Production dashboard for TLK Precision
+ * Version: 1.0.2
  * Author: Connor Bryant
  * License: GPL-2.0+
  */
 
-if (!defined('ABSPATH')) exit;
+// Exit if accessed directly
+if (!defined('ABSPATH')) {
+    exit;
+}
 
-add_filter('theme_page_templates', 'tlk_add_page_template_to_dropdown');
-add_filter('template_include', 'tlk_change_page_template', 99);
+function tlk_dash_enqueue_assets(){
+    // Enqueue CSS file
+    wp_enqueue_style(
+        'tlk_dash_styles',
+        plugins_url('css/tlk-dash.css', __FILE__),
+        array(),
+        '1.0.0',
+        'all'
+    );
+
+    // Enqueue JavaScript file
+    wp_enqueue_script(
+        'tlk_dash_script',
+        plugins_url('js/tlk-dash.js', __FILE__),
+        array('jquery'),
+        '1.0.0',
+        true
+    );
+}
+// Hook the function into wp_enqueue_scripts for the site front-end
+add_action('wp_enqueue_scripts', 'tlk_dash_enqueue_assets');
 
 /**
- * Add page templates
- * 
- * @param array $templates The list of page templates
- * 
- * @return array $templates The modified list of page templates
- * 
+ * Add page template
  */
+add_filter('theme_page_templates', 'tlk_add_page_template_to_dropdown');
 function tlk_add_page_template_to_dropdown($templates){
-    $templates[plugin_dir_path(__FILE__) . 'templates/page-template.php'] = __('Page Template From TLK Department Dashboard', 'text-domain');
+    $templates['templates/page-template.php'] = __('TLK Department Dashboard', 'text-domain');
 
     return $templates;
 }
 
+/**
+ * Custom CSS class for targeted removal of certain theme defaults
+ */
+add_filter('body_class', 'custom_template_body_class');
+function custom_template_body_class($classes){
+    // Check if current page has the custom template file
+    if (is_page_template('templates/page-template.php')){
+        $classes[] = 'tlk-prod-dash';
+    }
+
+    return $classes;
+}
+
+/**
+ * Load page template if selected
+ */
+add_filter('template_include', 'tlk_change_page_template', 99);
 function tlk_change_page_template($template){
     if (is_page()){
-        $meta = get_post_meta(get_the_ID());
+        $selected_template = get_page_template_slug(get_the_ID());
 
-        if (!empty($meta['__wp_page_template'][0]) && $meta['__wp_page_template'][0] != $template){
-            $template = $meta['_wp_page_template'][0];
+        if ($selected_template === 'templates/page-template.php'){
+            $plugin_template = plugin_dir_path(__FILE__) . 'templates/page-template.php';
+
+            if (file_exists($plugin_template)){
+                return $plugin_template;
+            }
         }
     }
 
