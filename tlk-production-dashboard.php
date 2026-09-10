@@ -166,12 +166,34 @@ function tlk_create_schedule_table() {
 
     dbDelta($sql);
 }
-
 register_activation_hook(__FILE__, 'tlk_create_schedule_table');
 
+/**
+ * Create production table
+ */
+function tlk_create_production_table(){
+    global $wpdb;
+
+    $table_name         = $wpdb->prefix . 'tlk_production';
+    $charset_collate    = $wpdb->get_charset_collate();
+
+    $sql = "CREATE TABLE {$table_name} (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        department VARCHAR(50) DEFAULT '',
+        employee VARCHAR(100) DEFAULT '',
+        qty VARCHAR(50) DEFAULT '',
+        entry_date DATETIME NOT NULL,
+        PRIMARY KEY (id)
+    ) {$charset_collate};";
+
+    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+
+    dbDelta($sql);
+}
+register_activation_hook(__FILE__, 'tlk_create_production_table');
 
 /**
- * Make sure table exists.
+ * Make sure TLK table exists.
  */
 function tlk_schedule_table_exists() {
     global $wpdb;
@@ -187,6 +209,33 @@ function tlk_schedule_table_exists() {
 
     if ($exists !== $table_name) {
         tlk_create_schedule_table();
+    }
+
+    return $wpdb->get_var(
+        $wpdb->prepare(
+            'SHOW TABLES LIKE %s',
+            $table_name
+        )
+    ) === $table_name;
+}
+
+/**
+ * Make sure TLK production table exists
+ */
+function tlk_production_table_exists() {
+    global $wpdb;
+
+    $table_name = $wpdb->prefix . 'tlk_production';
+
+    $exists = $wpdb->get_var(
+        $wpdb->prepare(
+            'SHOW TABLES LIKE %s',
+            $table_name
+        )
+    );
+
+    if ($exists !== $table_name) {
+        tlk_create_production_table();
     }
 
     return $wpdb->get_var(
