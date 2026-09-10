@@ -9,6 +9,24 @@
     height: fit-content;
 }
 
+.dash-container form {
+    width: 100%;
+    display: block;
+}
+
+.dash-container label {
+    width: 150px;
+}
+
+.dash-container select, .dash-container option, .dash-container input:not([type="submit"]) {
+    width: 300px;
+    margin-bottom: 1rem;
+}
+
+.dash-container input[type="submit"]{
+    width: 450px;
+}
+
 .dash-container__header, .dash-container__overview {
     display: flex;
     flex-direction: row;
@@ -31,5 +49,11 @@
 @media (max-width: 768px){
     .dash-container__header, .dash-container__overview {
         flex-direction: column;
+    }
+
+    .dash-container * {
+        display: flex !important;
+        width: 100% !important;
+        flex-direction: column !important;
     }
 }
