@@ -221,6 +221,97 @@ function tlk_schedule_table_exists() {
 }
 
 /**
+ * Create order shipment history table.
+ */
+function tlk_create_order_history_table() {
+    global $wpdb;
+
+    $table_name      = $wpdb->prefix . 'tlk_order_history';
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $sql = "CREATE TABLE {$table_name} (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        po_number VARCHAR(100) NOT NULL,
+        due_date DATE DEFAULT NULL,
+        shipped_date DATE NOT NULL,
+        on_time TINYINT(1) NOT NULL DEFAULT 0,
+        PRIMARY KEY (id),
+        KEY po_number (po_number),
+        KEY shipped_date (shipped_date)
+    ) {$charset_collate};";
+
+    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+
+    dbDelta($sql);
+}
+
+/**
+ * Make sure order history table exists.
+ */
+function tlk_order_history_table_exists() {
+    global $wpdb;
+
+    $table_name = $wpdb->prefix . 'tlk_order_history';
+
+    $exists = $wpdb->get_var(
+        $wpdb->prepare(
+            'SHOW TABLES LIKE %s',
+            $table_name
+        )
+    );
+
+    if ($exists !== $table_name) {
+        tlk_create_order_history_table();
+    }
+
+    return $wpdb->get_var(
+        $wpdb->prepare(
+            'SHOW TABLES LIKE %s',
+            $table_name
+        )
+    ) === $table_name;
+}
+
+/**
+ * Convert TLK schedule date to YYYY-MM-DD.
+ */
+function tlk_normalize_schedule_date($date_string) {
+
+    $date_string = trim((string) $date_string);
+
+    if ($date_string === '') {
+        return null;
+    }
+
+    $timezone = wp_timezone();
+
+    $date = DateTimeImmutable::createFromFormat(
+        '!n/j/y',
+        $date_string,
+        $timezone
+    );
+
+    if (!$date) {
+        $date = DateTimeImmutable::createFromFormat(
+            '!n/j/Y',
+            $date_string,
+            $timezone
+        );
+    }
+
+    if (!$date) {
+        return null;
+    }
+
+    return $date->format('Y-m-d');
+}
+
+register_activation_hook(
+    __FILE__,
+    'tlk_create_order_history_table'
+);
+
+/**
  * Make sure TLK production table exists
  */
 function tlk_production_table_exists() {
@@ -320,25 +411,35 @@ add_action(
 );
 
 /**
- * Sync Google spreadsheet to WordPress
+ * Sync Google spreadsheet to WordPress.
  */
 function tlk_sync_schedule_to_database() {
     global $wpdb;
 
-    $table_name = $wpdb->prefix . 'tlk_schedule';
+    $table_name   = $wpdb->prefix . 'tlk_schedule';
+    $history_table = $wpdb->prefix . 'tlk_order_history';
 
     /*
-     * Make sure our database table actually exists.
+     * Make sure database tables exist.
      */
     if (!tlk_schedule_table_exists()) {
         return new WP_Error(
             'table_missing',
-            'Could not create the schedule database table. Database error: ' . $wpdb->last_error
+            'Could not create the schedule database table. Database error: ' .
+            $wpdb->last_error
+        );
+    }
+
+    if (!tlk_order_history_table_exists()) {
+        return new WP_Error(
+            'history_table_missing',
+            'Could not create the order history table. Database error: ' .
+            $wpdb->last_error
         );
     }
 
     /*
-     * Get current Google Sheet data.
+     * Get fresh Google Sheet data.
      */
     $rows = get_schedule_data();
 
@@ -350,16 +451,134 @@ function tlk_sync_schedule_to_database() {
     }
 
     /*
-     * Google Sheet is source of truth.
+     * =========================================
+     * Capture orders currently in WordPress.
+     * =========================================
      *
-     * Remove the old WordPress copy first.
+     * These represent the schedule BEFORE the
+     * newest Google data replaces it.
      */
-    $deleted = $wpdb->query("TRUNCATE TABLE {$table_name}");
+    $old_rows = $wpdb->get_results(
+        "SELECT po_number, due_date
+         FROM {$table_name}
+         WHERE po_number != ''",
+        ARRAY_A
+    );
+
+    /*
+     * Build a unique list of old P.O.s.
+     */
+    $old_orders = array();
+
+    foreach ($old_rows as $old_row) {
+
+        $po = trim($old_row['po_number']);
+
+        if ($po === '') {
+            continue;
+        }
+
+        /*
+         * Only need one record per P.O.
+         */
+        if (!isset($old_orders[$po])) {
+            $old_orders[$po] = array(
+                'due_date' => $old_row['due_date'],
+            );
+        }
+    }
+
+    /*
+     * =========================================
+     * Build a list of P.O.s in NEW Google data.
+     * =========================================
+     */
+    $new_orders = array();
+
+    foreach ($rows as $row) {
+
+        $po = isset($row['P.O.'])
+            ? trim((string) $row['P.O.'])
+            : '';
+
+        if ($po === '') {
+            continue;
+        }
+
+        $new_orders[$po] = true;
+    }
+
+    /*
+     * =========================================
+     * Detect orders that disappeared.
+     * =========================================
+     *
+     * If an order existed before but is no
+     * longer on the schedule, treat it as shipped.
+     */
+    $shipped_date = current_time('Y-m-d');
+
+    foreach ($old_orders as $po => $old_order) {
+
+        /*
+         * Still exists on schedule.
+         */
+        if (isset($new_orders[$po])) {
+            continue;
+        }
+
+        /*
+         * Order disappeared.
+         * Treat this as its shipment date.
+         */
+        $due_date = tlk_normalize_schedule_date(
+            $old_order['due_date']
+        );
+
+        /*
+         * Determine whether shipment was on time.
+         */
+        $on_time = 0;
+
+        if ($due_date !== null) {
+            $on_time = ($shipped_date <= $due_date) ? 1 : 0;
+        }
+
+        /*
+         * Save shipment history.
+         */
+        $wpdb->insert(
+            $history_table,
+            array(
+                'po_number'    => $po,
+                'due_date'     => $due_date,
+                'shipped_date' => $shipped_date,
+                'on_time'      => $on_time,
+            ),
+            array(
+                '%s',
+                '%s',
+                '%s',
+                '%d',
+            )
+        );
+    }
+
+    /*
+     * =========================================
+     * Google Sheet is source of truth.
+     * Replace current schedule.
+     * =========================================
+     */
+    $deleted = $wpdb->query(
+        "TRUNCATE TABLE {$table_name}"
+    );
 
     if ($deleted === false) {
         return new WP_Error(
             'truncate_failed',
-            'Could not clear schedule table: ' . $wpdb->last_error
+            'Could not clear schedule table: ' .
+            $wpdb->last_error
         );
     }
 
@@ -370,16 +589,46 @@ function tlk_sync_schedule_to_database() {
         $result = $wpdb->insert(
             $table_name,
             array(
-                'po_number'   => isset($row['P.O.']) ? $row['P.O.'] : '',
-                'order_date'  => isset($row['DATE']) ? $row['DATE'] : '',
-                'customer'    => isset($row['CUSTOMER']) ? $row['CUSTOMER'] : '',
-                'due_date'    => isset($row['DUE']) ? $row['DUE'] : '',
-                'part_number' => isset($row['PART NUMBER']) ? $row['PART NUMBER'] : '',
-                'qty'         => isset($row['QTY']) ? $row['QTY'] : '',
-                'open_qty'    => isset($row['OPEN']) ? $row['OPEN'] : '',
-                'open_raw'    => isset($row['OPEN_RAW']) ? absint($row['OPEN_RAW']) : 0,
-                'status'      => isset($row['STATUS']) ? $row['STATUS'] : '',
-                'notes'       => isset($row['NOTES']) ? $row['NOTES'] : '',
+                'po_number'   => isset($row['P.O.'])
+                    ? $row['P.O.']
+                    : '',
+
+                'order_date'  => isset($row['DATE'])
+                    ? $row['DATE']
+                    : '',
+
+                'customer'    => isset($row['CUSTOMER'])
+                    ? $row['CUSTOMER']
+                    : '',
+
+                'due_date'    => isset($row['DUE'])
+                    ? $row['DUE']
+                    : '',
+
+                'part_number' => isset($row['PART NUMBER'])
+                    ? $row['PART NUMBER']
+                    : '',
+
+                'qty'         => isset($row['QTY'])
+                    ? $row['QTY']
+                    : '',
+
+                'open_qty'    => isset($row['OPEN'])
+                    ? $row['OPEN']
+                    : '',
+
+                'open_raw'    => isset($row['OPEN_RAW'])
+                    ? absint($row['OPEN_RAW'])
+                    : 0,
+
+                'status'      => isset($row['STATUS'])
+                    ? $row['STATUS']
+                    : '',
+
+                'notes'       => isset($row['NOTES'])
+                    ? $row['NOTES']
+                    : '',
+
                 'synced_at'   => current_time('mysql'),
             )
         );
@@ -387,7 +636,8 @@ function tlk_sync_schedule_to_database() {
         if ($result === false) {
             return new WP_Error(
                 'insert_failed',
-                'Database insert failed: ' . $wpdb->last_error
+                'Database insert failed: ' .
+                $wpdb->last_error
             );
         }
 
@@ -554,3 +804,121 @@ function tlk_get_past_due_open_quantity() {
 
     return $total_open;
 }
+
+/**
+ * Get on-time delivery stats for a month.
+ */
+function tlk_get_on_time_delivery($year, $month) {
+    global $wpdb;
+
+    if (!tlk_order_history_table_exists()) {
+        return array(
+            'total'   => 0,
+            'on_time' => 0,
+            'percent' => null,
+        );
+    }
+
+    $table_name = $wpdb->prefix . 'tlk_order_history';
+
+    $year  = absint($year);
+    $month = absint($month);
+
+    $start_date = sprintf(
+        '%04d-%02d-01',
+        $year,
+        $month
+    );
+
+    $start = new DateTimeImmutable(
+        $start_date,
+        wp_timezone()
+    );
+
+    $end = $start->modify('+1 month');
+
+    $stats = $wpdb->get_row(
+        $wpdb->prepare(
+            "SELECT
+                COUNT(*) AS total,
+                SUM(on_time) AS on_time
+             FROM {$table_name}
+             WHERE shipped_date >= %s
+               AND shipped_date < %s",
+            $start->format('Y-m-d'),
+            $end->format('Y-m-d')
+        ),
+        ARRAY_A
+    );
+
+    $total = isset($stats['total'])
+        ? (int) $stats['total']
+        : 0;
+
+    $on_time = isset($stats['on_time'])
+        ? (int) $stats['on_time']
+        : 0;
+
+    if ($total === 0) {
+        return array(
+            'total'   => 0,
+            'on_time' => 0,
+            'percent' => null,
+        );
+    }
+
+    return array(
+        'total'   => $total,
+        'on_time' => $on_time,
+        'percent' => ($on_time / $total) * 100,
+    );
+}
+
+/**
+ * Server cron endpoint for the TLK schedule sync.
+ *
+ * Example:
+ * https://your-site.com/?tlk_schedule_cron=YOUR_SECRET_KEY
+ * 
+ * In Hostinger hPanel, go to site's Advanced Cron Jobs area.
+ * Minute: 0 | Hour: 6 | Day, Month, Weekday blank
+ * 0 6 * * *
+ * curl -fsS "https://YOUR-DOMAIN.com/?tlk_schedule_cron=YOUR_SECRET_KEY" >/dev/null 2>&1
+ */
+function tlk_handle_server_cron_sync() {
+
+    if (!isset($_GET['tlk_schedule_cron'])) {
+        return;
+    }
+
+    $provided_key = sanitize_text_field(
+        wp_unslash($_GET['tlk_schedule_cron'])
+    );
+
+    /*
+     * Change this to a long random secret.
+     */
+    $expected_key = 'asdhasoia889y32thoaegohi';
+
+    if (!hash_equals($expected_key, $provided_key)) {
+        status_header(403);
+        exit('Unauthorized');
+    }
+
+    $result = tlk_sync_schedule_to_database();
+
+    if (is_wp_error($result)) {
+        status_header(500);
+
+        exit(
+            'TLK sync failed: ' .
+            esc_html($result->get_error_message())
+        );
+    }
+
+    exit(
+        'TLK schedule sync complete. Rows synced: ' .
+        absint($result)
+    );
+}
+add_action('init', 'tlk_handle_server_cron_sync');
