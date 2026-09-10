@@ -37,6 +37,10 @@ $on_time = tlk_get_on_time_delivery(
     $selected_year,
     $selected_month
 );
+
+/* Employee select */
+$select_employee = tlk_select_employee();
+
 ?>
 
 <form action="<?php echo esc_url(admin_url('admin-post.php')); ?>" method="POST">
@@ -56,12 +60,34 @@ $on_time = tlk_get_on_time_delivery(
 
     <div>
         <label for="employee">Employee:</label>
-        <input
-            type="text"
-            id="employee"
-            name="employee"
-            required
-        >
+
+        <select name="employee" id="employee" required>
+            <option value="">Select an employee</option>
+
+            <?php foreach ($select_employee as $employee) : ?>
+
+                <option value="<?php echo esc_attr($employee); ?>">
+                    <?php echo esc_html($employee); ?>
+                </option>
+
+            <?php endforeach; ?>
+
+            <option value="__new__">+ Add new employee</option>
+        </select>
+
+        <div id="new-employee-wrap" style="display: none;">
+
+            <label for="new_employee">
+                New Employee:
+            </label>
+
+            <input
+                type="text"
+                id="new_employee"
+                name="new_employee"
+            >
+
+        </div>
     </div>
 
     <div>

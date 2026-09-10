@@ -365,7 +365,18 @@ function handle_production_form_submission() {
 
     // Sanitize form values
     $department = sanitize_text_field($_POST['department']);
-    $employee   = sanitize_text_field($_POST['employee']);
+    $employee = sanitize_text_field($_POST['employee']);
+
+    if ($employee === '__new__') {
+
+        $employee = isset($_POST['new_employee'])
+            ? sanitize_text_field($_POST['new_employee'])
+            : '';
+
+        if ($employee === '') {
+            wp_die('Please enter the new employee name.');
+        }
+    }
     $qty        = absint($_POST['qty']);
 
     global $wpdb;
@@ -922,3 +933,18 @@ function tlk_handle_server_cron_sync() {
     );
 }
 add_action('init', 'tlk_handle_server_cron_sync');
+
+/* Select employees from existing production records */
+function tlk_select_employee() {
+    global $wpdb;
+
+    $table_name = $wpdb->prefix . 'tlk_production';
+
+    return $wpdb->get_col(
+        "SELECT DISTINCT employee
+         FROM {$table_name}
+         WHERE employee IS NOT NULL
+           AND employee != ''
+         ORDER BY employee ASC"
+    );
+}
