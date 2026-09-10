@@ -247,6 +247,78 @@ function tlk_production_table_exists() {
 }
 
 /**
+ * TLK production table form submissions
+ */
+function handle_production_form_submission() {
+
+    // Security check
+    if (
+        !isset($_POST['tlk_production_nonce']) ||
+        !wp_verify_nonce(
+            $_POST['tlk_production_nonce'],
+            'tlk_production_entry'
+        )
+    ) {
+        wp_die('Security check failed.');
+    }
+
+    // Make sure required fields exist
+    if (
+        !isset($_POST['department']) ||
+        !isset($_POST['employee']) ||
+        !isset($_POST['qty'])
+    ) {
+        wp_die('Missing required parameters.');
+    }
+
+    // Sanitize form values
+    $department = sanitize_text_field($_POST['department']);
+    $employee   = sanitize_text_field($_POST['employee']);
+    $qty        = absint($_POST['qty']);
+
+    global $wpdb;
+
+    // Make sure production table exists
+    if (!tlk_production_table_exists()) {
+        wp_die('Production table does not exist.');
+    }
+
+    $table_name = $wpdb->prefix . 'tlk_production';
+
+    $inserted = $wpdb->insert(
+        $table_name,
+        array(
+            'department' => $department,
+            'employee'   => $employee,
+            'qty'        => $qty,
+            'entry_date' => current_time('mysql'),
+        ),
+        array(
+            '%s',
+            '%s',
+            '%d',
+            '%s',
+        )
+    );
+
+    // Redirect so refreshing doesn't submit again
+    if ($inserted !== false) {
+        wp_safe_redirect(home_url('/production-entry-success/'));
+        exit;
+    }
+
+    wp_die(
+        'Database insertion failed: ' .
+        esc_html($wpdb->last_error)
+    );
+}
+
+add_action(
+    'admin_post_save_custom_get_data',
+    'handle_production_form_submission'
+);
+
+/**
  * Sync Google spreadsheet to WordPress
  */
 function tlk_sync_schedule_to_database() {

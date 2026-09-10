@@ -16,6 +16,46 @@ $schedule_rows = tlk_get_saved_schedule();
 // echo '</pre>';
 ?>
 
+<form action="<?php echo esc_url(admin_url('admin-post.php')); ?>" method="POST">
+
+    <input type="hidden" name="action" value="save_custom_get_data">
+
+    <?php wp_nonce_field('tlk_production_entry', 'tlk_production_nonce'); ?>
+
+    <div>
+        <label for="department">Department:</label>
+        <select name="department" id="department" required>
+            <option value="cnc">CNC</option>
+            <option value="pour">Pouring</option>
+            <option value="Build">Build</option>
+        </select>
+    </div>
+
+    <div>
+        <label for="employee">Employee:</label>
+        <input
+            type="text"
+            id="employee"
+            name="employee"
+            required
+        >
+    </div>
+
+    <div>
+        <label for="qty">Quantity:</label>
+        <input
+            type="number"
+            id="qty"
+            name="qty"
+            min="0"
+            required
+        >
+    </div>
+
+    <input type="submit" value="Submit">
+
+</form>
+
 <main class="dash-container">
     <div class="dash-container__header">
         <div>
