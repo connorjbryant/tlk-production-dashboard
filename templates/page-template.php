@@ -4,6 +4,7 @@
  */
 get_header();
 
+// Eventually remove this once the real hostinger cron is in place
 $sync_result = tlk_sync_schedule_to_database();
 
 $schedule_rows = tlk_get_saved_schedule();
