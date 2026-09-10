@@ -81,7 +81,7 @@ function tlk_change_page_template($template){
  * Connects to the Google Apps Script Web App
  */
 function get_schedule_data() {
-    $web_app_url = 'https://script.google.com/macros/s/AKfycbyECN9HB6_V-5aIU3yVYXuVQeghscd4NJejll8vLVES2GUaHd4mfvVrH7AVoe7V7wTCDQ/exec';
+    $web_app_url = 'https://script.google.com/macros/s/AKfycbw3-sQOqCGQwUvoBS3E46vBvjg7hLYmDXrw_vYkQJ7kW2OduB0p588CmBCY9rhd54q0gQ/exec';
 
     delete_transient('clean_schedule_cache_data');
 
@@ -156,6 +156,7 @@ function tlk_create_schedule_table() {
         part_number VARCHAR(255) DEFAULT '',
         qty VARCHAR(50) DEFAULT '',
         open_qty VARCHAR(50) DEFAULT '',
+        open_raw INT NOT NULL DEFAULT 0,
         status VARCHAR(100) DEFAULT '',
         notes TEXT,
         synced_at DATETIME NOT NULL,
@@ -376,6 +377,7 @@ function tlk_sync_schedule_to_database() {
                 'part_number' => isset($row['PART NUMBER']) ? $row['PART NUMBER'] : '',
                 'qty'         => isset($row['QTY']) ? $row['QTY'] : '',
                 'open_qty'    => isset($row['OPEN']) ? $row['OPEN'] : '',
+                'open_raw'    => isset($row['OPEN_RAW']) ? absint($row['OPEN_RAW']) : 0,
                 'status'      => isset($row['STATUS']) ? $row['STATUS'] : '',
                 'notes'       => isset($row['NOTES']) ? $row['NOTES'] : '',
                 'synced_at'   => current_time('mysql'),
@@ -396,6 +398,24 @@ function tlk_sync_schedule_to_database() {
 }
 
 /**
+ * Get total open quantity from saved schedule.
+ */
+function tlk_get_total_open_orders() {
+    global $wpdb;
+
+    $table_name = $wpdb->prefix . 'tlk_schedule';
+
+    if (!tlk_schedule_table_exists()) {
+        return 0;
+    }
+
+    return (int) $wpdb->get_var(
+        "SELECT COALESCE(SUM(open_raw), 0)
+         FROM {$table_name}"
+    );
+}
+
+/**
  * Get saved WordPress schedule
  */
 function tlk_get_saved_schedule() {
@@ -411,4 +431,126 @@ function tlk_get_saved_schedule() {
         "SELECT * FROM {$table_name} ORDER BY id ASC",
         ARRAY_A
     );
+}
+
+/**
+ * Get number of unique orders that are red on the schedule.
+ * Red means due today or already past due.
+ */
+function tlk_get_past_due_orders() {
+    global $wpdb;
+
+    $table_name = $wpdb->prefix . 'tlk_schedule';
+
+    if (!tlk_schedule_table_exists()) {
+        return 0;
+    }
+
+    $rows = $wpdb->get_results(
+        "SELECT po_number, due_date
+         FROM {$table_name}
+         WHERE po_number != ''
+           AND due_date != ''",
+        ARRAY_A
+    );
+
+    if (empty($rows)) {
+        return 0;
+    }
+
+    $timezone = wp_timezone();
+    $today = new DateTimeImmutable('today', $timezone);
+
+    $past_due_pos = array();
+
+    foreach ($rows as $row) {
+
+        $due_string = trim($row['due_date']);
+
+        $due = DateTimeImmutable::createFromFormat(
+            '!n/j/y',
+            $due_string,
+            $timezone
+        );
+
+        if (!$due) {
+            $due = DateTimeImmutable::createFromFormat(
+                '!n/j/Y',
+                $due_string,
+                $timezone
+            );
+        }
+
+        if (!$due) {
+            continue;
+        }
+
+        // Match Google Sheet red logic:
+        // red = due today OR already past due.
+        if ($due < $today) {
+            $past_due_pos[$row['po_number']] = true;
+        }
+    }
+
+    return count($past_due_pos);
+}
+
+/**
+ * Get total open quantity for past due orders.
+ * Past due means due BEFORE today.
+ */
+function tlk_get_past_due_open_quantity() {
+    global $wpdb;
+
+    $table_name = $wpdb->prefix . 'tlk_schedule';
+
+    if (!tlk_schedule_table_exists()) {
+        return 0;
+    }
+
+    $rows = $wpdb->get_results(
+        "SELECT due_date, open_raw
+         FROM {$table_name}
+         WHERE due_date != ''",
+        ARRAY_A
+    );
+
+    if (empty($rows)) {
+        return 0;
+    }
+
+    $timezone = wp_timezone();
+    $today = new DateTimeImmutable('today', $timezone);
+
+    $total_open = 0;
+
+    foreach ($rows as $row) {
+
+        $due_string = trim($row['due_date']);
+
+        $due = DateTimeImmutable::createFromFormat(
+            '!n/j/y',
+            $due_string,
+            $timezone
+        );
+
+        if (!$due) {
+            $due = DateTimeImmutable::createFromFormat(
+                '!n/j/Y',
+                $due_string,
+                $timezone
+            );
+        }
+
+        if (!$due) {
+            continue;
+        }
+
+        // Past due = BEFORE today.
+        if ($due < $today) {
+            $total_open += (int) $row['open_raw'];
+        }
+    }
+
+    return $total_open;
 }

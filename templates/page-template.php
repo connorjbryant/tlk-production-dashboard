@@ -4,12 +4,16 @@
  */
 get_header();
 
-// Fetch Google Apps Script key-value data
-// $schedule_rows = get_schedule_data();
+$sync_result = tlk_sync_schedule_to_database();
 
-tlk_sync_schedule_to_database();
+// echo '<pre>';
+// print_r($sync_result);
+// echo '</pre>';
 
 $schedule_rows = tlk_get_saved_schedule();
+$total_open    = tlk_get_total_open_orders();
+//$past_due      = tlk_get_past_due_orders();
+$past_due      = tlk_get_past_due_open_quantity();
 
 // echo '<pre>';
 // print_r($schedule_rows);
@@ -66,10 +70,23 @@ $schedule_rows = tlk_get_saved_schedule();
         </div>
     </div>
     <div class="dash-container__overview">
-        <div>One</div>
-        <div>Two</div>
+
+    <div class="dashboard-card">
+        <p>Open Quantity for Orders: </p>&nbsp;
+            <strong>
+                <?php echo esc_html(number_format_i18n($total_open)); ?>
+            </strong>
+        </div>
+
+        <div class="dashboard-card">
+            <p>Past Due Quantity for Orders: </p>&nbsp;
+            <strong>
+                <?php echo esc_html(number_format_i18n($past_due)); ?>
+            </strong>
+        </div>
         <div>Three</div>
         <div>Four</div>
+
     </div>
     <div class="table-container">
         <?php
