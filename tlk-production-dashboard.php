@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 1.0.4
+ * Version: 1.1.0
  * Author: Connor Bryant
  * License: GPL-2.0+
  */
@@ -18,7 +18,7 @@ function tlk_dash_enqueue_assets(){
         'tlk_dash_styles',
         plugins_url('css/tlk-dash.css', __FILE__),
         array(),
-        '1.0.0',
+        '1.1.0',
         'all'
     );
 
@@ -27,7 +27,7 @@ function tlk_dash_enqueue_assets(){
         'tlk_dash_script',
         plugins_url('js/tlk-dash.js', __FILE__),
         array('jquery'),
-        '1.0.0',
+        '1.1.0',
         true
     );
 }
@@ -190,11 +190,15 @@ function tlk_create_production_table(){
 
     $sql = "CREATE TABLE {$table_name} (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        user_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
         department VARCHAR(50) DEFAULT '',
         employee VARCHAR(100) DEFAULT '',
         qty VARCHAR(50) DEFAULT '',
         entry_date DATETIME NOT NULL,
-        PRIMARY KEY (id)
+        updated_at DATETIME DEFAULT NULL,
+        PRIMARY KEY (id),
+        KEY user_id (user_id),
+        KEY entry_date (entry_date)
     ) {$charset_collate};";
 
     require_once ABSPATH . 'wp-admin/includes/upgrade.php';
@@ -202,6 +206,22 @@ function tlk_create_production_table(){
     dbDelta($sql);
 }
 register_activation_hook(__FILE__, 'tlk_create_production_table');
+
+/**
+ * Upgrade the production table when new columns/indexes are added.
+ * dbDelta safely updates an existing table without removing its data.
+ */
+function tlk_maybe_upgrade_production_table() {
+    $db_version = '1.1.0';
+
+    if (get_option('tlk_production_db_version') === $db_version) {
+        return;
+    }
+
+    tlk_create_production_table();
+    update_option('tlk_production_db_version', $db_version);
+}
+add_action('init', 'tlk_maybe_upgrade_production_table', 5);
 
 /**
  * Make sure TLK table exists.
@@ -401,12 +421,14 @@ function handle_production_form_submission() {
     $inserted = $wpdb->insert(
         $table_name,
         array(
+            'user_id'    => get_current_user_id(),
             'department' => $department,
             'employee'   => $employee,
             'qty'        => $qty,
             'entry_date' => current_time('mysql'),
         ),
         array(
+            '%d',
             '%s',
             '%s',
             '%d',
@@ -429,6 +451,158 @@ function handle_production_form_submission() {
 add_action(
     'admin_post_save_custom_get_data',
     'handle_production_form_submission'
+);
+
+/**
+ * Get the current logged-in user's production entries that are still editable.
+ * Entries are editable for 24 hours after they were created.
+ */
+function tlk_get_current_user_editable_entries() {
+    global $wpdb;
+
+    $user_id = get_current_user_id();
+
+    if (!$user_id || !tlk_production_table_exists()) {
+        return array();
+    }
+
+    $table_name = $wpdb->prefix . 'tlk_production';
+    $now = current_time('mysql');
+
+    return $wpdb->get_results(
+        $wpdb->prepare(
+            "SELECT id, user_id, department, employee, qty, entry_date, updated_at
+             FROM {$table_name}
+             WHERE user_id = %d
+               AND entry_date >= DATE_SUB(%s, INTERVAL 24 HOUR)
+             ORDER BY entry_date DESC",
+            $user_id,
+            $now
+        ),
+        ARRAY_A
+    );
+}
+
+/**
+ * Update one production entry belonging to the current user.
+ * The server enforces the 24-hour edit window.
+ */
+function tlk_handle_production_entry_update() {
+    if (
+        !isset($_POST['tlk_edit_production_nonce']) ||
+        !wp_verify_nonce(
+            sanitize_text_field(wp_unslash($_POST['tlk_edit_production_nonce'])),
+            'tlk_edit_production_entry'
+        )
+    ) {
+        wp_die('Security check failed.');
+    }
+
+    $entry_id = isset($_POST['entry_id'])
+        ? absint($_POST['entry_id'])
+        : 0;
+
+    $department = isset($_POST['department'])
+        ? sanitize_text_field(wp_unslash($_POST['department']))
+        : '';
+
+    $employee = isset($_POST['employee'])
+        ? sanitize_text_field(wp_unslash($_POST['employee']))
+        : '';
+
+    $qty = isset($_POST['qty'])
+        ? absint($_POST['qty'])
+        : 0;
+
+    if (!$entry_id || $department === '' || $employee === '') {
+        wp_die('Missing required parameters.');
+    }
+
+    global $wpdb;
+
+    if (!tlk_production_table_exists()) {
+        wp_die('Production table does not exist.');
+    }
+
+    $table_name = $wpdb->prefix . 'tlk_production';
+    $user_id = get_current_user_id();
+
+    $entry = $wpdb->get_row(
+        $wpdb->prepare(
+            "SELECT id, user_id, entry_date
+             FROM {$table_name}
+             WHERE id = %d
+               AND user_id = %d
+             LIMIT 1",
+            $entry_id,
+            $user_id
+        ),
+        ARRAY_A
+    );
+
+    if (!$entry) {
+        wp_die('Production entry not found or you do not have permission to edit it.');
+    }
+
+    $timezone = wp_timezone();
+    $entry_time = DateTimeImmutable::createFromFormat(
+        'Y-m-d H:i:s',
+        $entry['entry_date'],
+        $timezone
+    );
+    $now = new DateTimeImmutable('now', $timezone);
+
+    if (!$entry_time || $entry_time->modify('+24 hours') < $now) {
+        wp_die('This production entry can no longer be edited because the 24-hour edit window has expired.');
+    }
+
+    $updated = $wpdb->update(
+        $table_name,
+        array(
+            'department' => $department,
+            'employee'   => $employee,
+            'qty'        => $qty,
+            'updated_at' => current_time('mysql'),
+        ),
+        array(
+            'id'      => $entry_id,
+            'user_id' => $user_id,
+        ),
+        array(
+            '%s',
+            '%s',
+            '%d',
+            '%s',
+        ),
+        array(
+            '%d',
+            '%d',
+        )
+    );
+
+    if ($updated === false) {
+        wp_die(
+            'Database update failed: ' .
+            esc_html($wpdb->last_error)
+        );
+    }
+
+    $redirect_to = isset($_POST['redirect_to'])
+        ? wp_validate_redirect(
+            esc_url_raw(wp_unslash($_POST['redirect_to'])),
+            home_url('/')
+        )
+        : home_url('/');
+
+    $redirect_to = add_query_arg('entry_updated', '1', $redirect_to);
+
+    wp_safe_redirect($redirect_to);
+    exit;
+}
+
+add_action(
+    'admin_post_tlk_update_production_entry',
+    'tlk_handle_production_entry_update'
 );
 
 /**

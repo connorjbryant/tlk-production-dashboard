@@ -126,6 +126,98 @@
     text-decoration: underline;
 }
 
+/* Recent production entries / 24-hour editing */
+.dash-container__recent-entries {
+    width: 100%;
+    margin-bottom: 1.5rem;
+    padding: 1.5rem;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+}
+
+.recent-entries__header h2 {
+    margin-bottom: 0.25rem;
+}
+
+.recent-entries__header p,
+.recent-entries__empty {
+    margin: 0;
+}
+
+.recent-entries__notice {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid #b7d7a8;
+    border-radius: 4px;
+    background: #f1f8ed;
+}
+
+.recent-entries__list {
+    margin-top: 1rem;
+    border-top: 1px solid #ddd;
+}
+
+.recent-entry {
+    border-bottom: 1px solid #ddd;
+}
+
+.recent-entry__summary {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.9rem 0;
+    cursor: pointer;
+    list-style-position: inside;
+}
+
+.recent-entry__main,
+.recent-entry__meta {
+    display: flex !important;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0 !important;
+    background: transparent !important;
+}
+
+.recent-entry__meta {
+    white-space: nowrap;
+}
+
+.recent-entry__form {
+    display: grid;
+    grid-template-columns:
+        repeat(3, minmax(0, 1fr)) auto;
+    gap: 0.75rem;
+    align-items: end;
+}
+
+.recent-entry__form label {
+    margin-bottom: 0.25rem;
+    background: transparent;
+}
+
+.dash-container .recent-entry__form select,
+.dash-container
+.recent-entry__form
+input:not([type="submit"]) {
+    width: 100%;
+    max-width: none;
+    margin-bottom: 0;
+}
+
+.recent-entry__save {
+    min-height: 44px;
+    padding: 0 1rem;
+    border: 0;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.recent-entry__updated {
+    grid-column: 1 / -1;
+}
+
 /* Mobile */
 @media (max-width: 768px) {
     .dash-container {
@@ -141,5 +233,20 @@
     .dash-container input[type="submit"] {
         width: 100%;
         max-width: none;
+    }
+
+    .recent-entry__summary,
+    .recent-entry__main,
+    .recent-entry__meta {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .recent-entry__form {
+        grid-template-columns: 1fr;
+    }
+
+    .recent-entry__edit {
+        padding-left: 0;
     }
 }

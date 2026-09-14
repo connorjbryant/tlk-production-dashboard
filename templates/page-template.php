@@ -77,6 +77,17 @@ $on_time = tlk_get_on_time_delivery($selected_year, $selected_month);
 
 /* Employee select */
 $select_employee = tlk_select_employee();
+
+/* Current user's entries that are still inside the 24-hour edit window. */
+$editable_entries = tlk_get_current_user_editable_entries();
+
+$edit_redirect = add_query_arg(
+    array(
+        'month' => $selected_month,
+        'year'  => $selected_year,
+    ),
+    get_permalink()
+);
 ?>
 
 <main class="dash-container">
@@ -149,6 +160,160 @@ $select_employee = tlk_select_employee();
 
         </form>
     </div>
+
+    <section class="dash-container__recent-entries">
+        <div class="recent-entries__header">
+            <div>
+                <h2>My Recent Entries</h2>
+                <p>Entries you submit can be corrected for 24 hours.</p>
+            </div>
+        </div>
+
+        <?php if (isset($_GET['entry_updated']) && $_GET['entry_updated'] === '1') : ?>
+            <div class="recent-entries__notice" role="status">
+                Entry updated successfully.
+            </div>
+        <?php endif; ?>
+
+        <?php if (empty($editable_entries)) : ?>
+            <p class="recent-entries__empty">
+                You do not have any entries available to edit right now.
+            </p>
+        <?php else : ?>
+
+            <div class="recent-entries__list">
+                <?php foreach ($editable_entries as $entry) : ?>
+                    <?php
+                    $entry_time = new DateTimeImmutable(
+                        $entry['entry_date'],
+                        wp_timezone()
+                    );
+                    $expires_at = $entry_time->modify('+24 hours');
+                    ?>
+
+                    <details class="recent-entry">
+                        <summary class="recent-entry__summary">
+                            <span class="recent-entry__main">
+                                <strong><?php echo esc_html($entry['employee']); ?></strong>
+                                <span><?php echo esc_html(ucfirst($entry['department'])); ?></span>
+                                <span><?php echo esc_html(number_format_i18n((int) $entry['qty'])); ?> parts</span>
+                            </span>
+
+                            <span class="recent-entry__meta">
+                                <?php echo esc_html(
+                                    wp_date(
+                                        'M j, g:i a',
+                                        $entry_time->getTimestamp()
+                                    )
+                                ); ?>
+                                · Edit
+                            </span>
+                        </summary>
+
+                        <div class="recent-entry__edit">
+                            <p class="recent-entry__expires">
+                                Editable until
+                                <strong>
+                                    <?php echo esc_html(
+                                        wp_date(
+                                            'M j, Y g:i a',
+                                            $expires_at->getTimestamp()
+                                        )
+                                    ); ?>
+                                </strong>
+                            </p>
+
+                            <form
+                                action="<?php echo esc_url(admin_url('admin-post.php')); ?>"
+                                method="POST"
+                                class="recent-entry__form"
+                            >
+                                <input
+                                    type="hidden"
+                                    name="action"
+                                    value="tlk_update_production_entry"
+                                >
+                                <input
+                                    type="hidden"
+                                    name="entry_id"
+                                    value="<?php echo esc_attr($entry['id']); ?>"
+                                >
+                                <input
+                                    type="hidden"
+                                    name="redirect_to"
+                                    value="<?php echo esc_url($edit_redirect); ?>"
+                                >
+
+                                <?php wp_nonce_field(
+                                    'tlk_edit_production_entry',
+                                    'tlk_edit_production_nonce'
+                                ); ?>
+
+                                <div>
+                                    <label for="edit-department-<?php echo esc_attr($entry['id']); ?>">
+                                        Department
+                                    </label>
+                                    <select
+                                        id="edit-department-<?php echo esc_attr($entry['id']); ?>"
+                                        name="department"
+                                        required
+                                    >
+                                        <option value="cnc" <?php selected($entry['department'], 'cnc'); ?>>CNC</option>
+                                        <option value="pour" <?php selected($entry['department'], 'pour'); ?>>Pouring</option>
+                                        <option value="Build" <?php selected($entry['department'], 'Build'); ?>>Build</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label for="edit-employee-<?php echo esc_attr($entry['id']); ?>">
+                                        Employee
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="edit-employee-<?php echo esc_attr($entry['id']); ?>"
+                                        name="employee"
+                                        value="<?php echo esc_attr($entry['employee']); ?>"
+                                        required
+                                    >
+                                </div>
+
+                                <div>
+                                    <label for="edit-qty-<?php echo esc_attr($entry['id']); ?>">
+                                        Quantity
+                                    </label>
+                                    <input
+                                        type="number"
+                                        id="edit-qty-<?php echo esc_attr($entry['id']); ?>"
+                                        name="qty"
+                                        min="0"
+                                        value="<?php echo esc_attr((int) $entry['qty']); ?>"
+                                        required
+                                    >
+                                </div>
+
+                                <button type="submit" class="recent-entry__save">
+                                    Save Changes
+                                </button>
+
+                                <?php if (!empty($entry['updated_at'])) : ?>
+                                    <small class="recent-entry__updated">
+                                        Last corrected
+                                        <?php echo esc_html(
+                                            wp_date(
+                                                'M j, g:i a',
+                                                strtotime($entry['updated_at'])
+                                            )
+                                        ); ?>
+                                    </small>
+                                <?php endif; ?>
+                            </form>
+                        </div>
+                    </details>
+                <?php endforeach; ?>
+            </div>
+
+        <?php endif; ?>
+    </section>
 
     <div class="dash-container__header">
         <div>
