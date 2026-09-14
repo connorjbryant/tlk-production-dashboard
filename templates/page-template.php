@@ -45,13 +45,14 @@ $select_employee = tlk_select_employee();
 
 <main class="dash-container">
     <div class="dash-container__form">
+        <h1>Production Entry Log</h1>
         <form action="<?php echo esc_url(admin_url('admin-post.php')); ?>" method="POST">
 
             <input type="hidden" name="action" value="save_custom_get_data">
 
             <?php wp_nonce_field('tlk_production_entry', 'tlk_production_nonce'); ?>
 
-            <div>
+            <div class="dash-container__bg">
                 <label for="department">Department:</label>
                 <select name="department" id="department" required>
                     <option value="cnc">CNC</option>
@@ -60,7 +61,7 @@ $select_employee = tlk_select_employee();
                 </select>
             </div>
 
-            <div>
+            <div class="dash-container__bg">
                 <label for="employee">Employee:</label>
 
                 <select name="employee" id="employee" required>
@@ -92,7 +93,7 @@ $select_employee = tlk_select_employee();
                 </div>
             </div>
 
-            <div>
+            <div class="dash-container__bg">
                 <label for="qty">Quantity:</label>
                 <input
                     type="number"
@@ -113,7 +114,7 @@ $select_employee = tlk_select_employee();
         </div>
         <div class="dashboard-month-filter">
 
-            <form method="GET">
+            <form class="prod-dash-form" method="GET">
 
                 <select
                     name="month"
