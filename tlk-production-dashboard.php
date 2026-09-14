@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 1.1.0
+ * Version: 1.1.1
  * Author: Connor Bryant
  * License: GPL-2.0+
  */
@@ -18,7 +18,7 @@ function tlk_dash_enqueue_assets(){
         'tlk_dash_styles',
         plugins_url('css/tlk-dash.css', __FILE__),
         array(),
-        '1.1.0',
+        '1.1.1',
         'all'
     );
 
@@ -27,7 +27,7 @@ function tlk_dash_enqueue_assets(){
         'tlk_dash_script',
         plugins_url('js/tlk-dash.js', __FILE__),
         array('jquery'),
-        '1.1.0',
+        '1.1.1',
         true
     );
 }
@@ -1235,3 +1235,41 @@ function tlk_select_employee() {
          ORDER BY employee ASC"
     );
 }
+
+/**
+ * Redirect selected users once, immediately after login.
+ */
+function custom_login_redirect($redirect_to, $request, $user) {
+
+    if (is_wp_error($user)) {
+        return $redirect_to;
+    }
+
+    $allowed_emails = array(
+        'connor@flexrockperformance.com',
+        'josh@tlkprecision.com',
+        'brian@tlkprecision.com',
+        'todd@tlkprecision.com',
+        'deric@tlkprecision.com',
+    );
+
+    if (
+        !empty($user->user_email) &&
+        in_array(
+            $user->user_email,
+            $allowed_emails,
+            true
+        )
+    ) {
+        return home_url('/tlk-production-dashboard/');
+    }
+
+    return $redirect_to;
+}
+
+add_filter(
+    'login_redirect',
+    'custom_login_redirect',
+    PHP_INT_MAX,
+    3
+);

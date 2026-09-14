@@ -91,6 +91,19 @@ $edit_redirect = add_query_arg(
 ?>
 
 <main class="dash-container">
+    <?php
+    $current_user = wp_get_current_user();
+
+    $allowed_emails = array(
+        'connor@flexrockperformance.com',
+        'josh@tlkprecision.com',
+        'brian@tlkprecision.com',
+        'todd@tlkprecision.com',
+        'deric@tlkprecision.com',
+    );
+
+    if (in_array($current_user->user_email, $allowed_emails, true)) { ?>
+
     <div class="dash-container__form">
         <h1>Production Entry Log</h1>
         <form action="<?php echo esc_url(
@@ -314,6 +327,8 @@ $edit_redirect = add_query_arg(
 
         <?php endif; ?>
     </section>
+
+    <?php } ?>
 
     <div class="dash-container__header">
         <div>
