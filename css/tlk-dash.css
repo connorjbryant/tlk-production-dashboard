@@ -104,6 +104,24 @@
     transition: 0.5s;
 }
 
+.dashboard-card__details, .active-summary.dashboard-card__details {
+    position: relative;
+}
+
+.dashboard-card__details summary {
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.active-summary.dashboard-card__details::after {
+    position: absolute;
+    content: " - Hide";
+    top: 0;
+    right: 0;
+    pointer-events: none;
+    font-weight: 600;
+}
+
 /* Mobile */
 @media (max-width: 768px) {
     .dash-container {
