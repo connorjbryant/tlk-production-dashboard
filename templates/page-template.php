@@ -345,28 +345,26 @@ $edit_redirect = add_query_arg(
                 echo $cnc_quota['met']
                     ? 'CNC: Good job '
                     : 'CNC: Did not meet quota ';
-                echo $cnc_quota['total'];
                 ?>
+                <p>Total parts this month: <?php echo $cnc_quota['total']; ?></p>
             </div>
             <div class="dashboard-card <?php echo $pouring_quota['met'] ? 'js-goodquota' : 'js-badquota'; ?>">
                 <?php
                 echo $pouring_quota['met']
                     ? 'Building: Good job '
                     : 'Building: Did not meet quota ';
-                echo $pouring_quota['total'];
                 ?>
+                <p>Total parts this month: <?php echo $pouring_quota['total']; ?></p>
             </div>
             <div class="dashboard-card <?php echo $building_quota['met'] ? 'js-goodquota' : 'js-badquota'; ?>">
-
                 <p>
                     <?php
                     echo $building_quota['met']
                         ? 'Building: Good job '
                         : 'Building: Did not meet quota ';
-                    echo $building_quota['total'];
                     ?>
+                    <p>Total parts this month: <?php echo $building_quota['total']; ?></p>
                 </p>
-
             </div>
         </div>
     </div>
