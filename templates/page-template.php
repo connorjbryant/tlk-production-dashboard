@@ -14,6 +14,8 @@ $past_due = tlk_get_past_due_open_quantity();
 
 // Quota
 $cnc_quota = cnc_quota();
+$pouring_quota = pouring_quota();
+$building_quota = building_quota();
 
 /*
  * Dashboard month/year filtering.
@@ -337,7 +339,36 @@ $edit_redirect = add_query_arg(
         <div>
             <h1>Production Statistics</h1>
         </div>
-        <p><?php echo esc_html($cnc_quota); ?></p>
+        <div class="dash-container__overview">
+            <div class="dashboard-card <?php echo $cnc_quota['met'] ? 'js-goodquota' : 'js-badquota'; ?>">
+                <?php
+                echo $cnc_quota['met']
+                    ? 'CNC: Good job '
+                    : 'CNC: Did not meet quota ';
+                echo $cnc_quota['total'];
+                ?>
+            </div>
+            <div class="dashboard-card <?php echo $pouring_quota['met'] ? 'js-goodquota' : 'js-badquota'; ?>">
+                <?php
+                echo $pouring_quota['met']
+                    ? 'Building: Good job '
+                    : 'Building: Did not meet quota ';
+                echo $pouring_quota['total'];
+                ?>
+            </div>
+            <div class="dashboard-card <?php echo $building_quota['met'] ? 'js-goodquota' : 'js-badquota'; ?>">
+
+                <p>
+                    <?php
+                    echo $building_quota['met']
+                        ? 'Building: Good job '
+                        : 'Building: Did not meet quota ';
+                    echo $building_quota['total'];
+                    ?>
+                </p>
+
+            </div>
+        </div>
     </div>
 
     <div class="dash-container__header">

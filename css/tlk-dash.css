@@ -227,6 +227,16 @@ input:not([type="submit"]) {
     grid-column: 1 / -1;
 }
 
+.js-goodquota {
+    background-color: rgb(199, 245, 199) !important;
+    color: black;
+}
+
+.js-badquota {
+    background-color: rgb(255, 194, 194) !important;
+    color: black;
+}
+
 /* Mobile */
 @media (max-width: 768px) {
     .dash-container {
