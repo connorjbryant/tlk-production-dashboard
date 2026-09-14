@@ -35,11 +35,12 @@ function tlk_dash_enqueue_assets(){
 add_action('wp_enqueue_scripts', 'tlk_dash_enqueue_assets');
 
 /**
- * Add page template
+ * Add page template(s)
  */
 add_filter('theme_page_templates', 'tlk_add_page_template_to_dropdown');
 function tlk_add_page_template_to_dropdown($templates){
     $templates['templates/page-template.php'] = __('TLK Department Dashboard', 'text-domain');
+    $templates['templates/schedule-backup.php'] = __('TLK Schedule', 'text-domain');
 
     return $templates;
 }
@@ -61,16 +62,25 @@ function custom_template_body_class($classes){
  * Load page template if selected
  */
 add_filter('template_include', 'tlk_change_page_template', 99);
-function tlk_change_page_template($template){
-    if (is_page()){
-        $selected_template = get_page_template_slug(get_the_ID());
+function tlk_change_page_template($template) {
 
-        if ($selected_template === 'templates/page-template.php'){
-            $plugin_template = plugin_dir_path(__FILE__) . 'templates/page-template.php';
+    if (!is_page()) {
+        return $template;
+    }
 
-            if (file_exists($plugin_template)){
-                return $plugin_template;
-            }
+    $selected_template = get_page_template_slug(get_the_ID());
+
+    $plugin_templates = array(
+        'templates/page-template.php',
+        'templates/schedule-backup.php',
+    );
+
+    if (in_array($selected_template, $plugin_templates, true)) {
+
+        $plugin_template = plugin_dir_path(__FILE__) . $selected_template;
+
+        if (file_exists($plugin_template)) {
+            return $plugin_template;
         }
     }
 
