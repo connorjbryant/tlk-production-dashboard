@@ -135,7 +135,7 @@ $select_employee = tlk_select_employee();
             </div>
 
             <div class="dash-container__bg">
-                <label for="qty">Quantity:</label>
+                <label for="qty">Enter quantity of parts produced:</label>
                 <input
                     type="number"
                     id="qty"
