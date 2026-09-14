@@ -337,7 +337,7 @@ $edit_redirect = add_query_arg(
 
     <div class="dash-container__header">
         <div>
-            <h1>Production Statistics</h1>
+            <h1>Production Statistics by Department</h1>
         </div>
         <div class="dash-container__overview">
             <div class="dashboard-card <?php echo $cnc_quota['met'] ? 'js-goodquota' : 'js-badquota'; ?>">
@@ -351,8 +351,8 @@ $edit_redirect = add_query_arg(
             <div class="dashboard-card <?php echo $pouring_quota['met'] ? 'js-goodquota' : 'js-badquota'; ?>">
                 <?php
                 echo $pouring_quota['met']
-                    ? 'Building: Good job '
-                    : 'Building: Did not meet quota ';
+                    ? 'Pouring: Good job '
+                    : 'Pouring: Did not meet quota ';
                 ?>
                 <p>Total parts this month: <?php echo $pouring_quota['total']; ?></p>
             </div>
