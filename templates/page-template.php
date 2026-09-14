@@ -104,7 +104,7 @@ $select_employee = tlk_select_employee();
                 >
             </div>
 
-            <input type="submit" value="Submit">
+            <input type="submit" class="prod-entry-submit" value="Submit">
 
         </form>
     </div>

@@ -87,6 +87,23 @@
     background: linear-gradient(45deg, #ffffff, transparent) !important;
 }
 
+.prod-entry-submit {
+    font-weight: 500;
+    color: white;
+    text-align: center;
+    display: inline-block;
+    min-width: 170px;
+    height: 50px;
+    line-height: 52px;
+    border-radius: 3px;
+    padding: 0 20px;
+    background-color: #437b1b;
+    text-transform: capitalize;
+    border: 0;
+    box-shadow: none;
+    transition: 0.5s;
+}
+
 /* Mobile */
 @media (max-width: 768px) {
     .dash-container {
