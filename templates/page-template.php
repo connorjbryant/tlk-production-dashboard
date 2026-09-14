@@ -13,11 +13,16 @@ $total_open = tlk_get_total_open_orders();
 $past_due   = tlk_get_past_due_open_quantity();
 
 /*
- * Selected dashboard month.
+ * Dashboard month/year filtering.
  */
 $current_year  = (int) wp_date('Y');
 $current_month = (int) wp_date('n');
 
+$available_periods = tlk_get_available_dashboard_periods();
+
+/*
+ * Default to current month/year.
+ */
 $selected_year = isset($_GET['year'])
     ? absint($_GET['year'])
     : $current_year;
@@ -31,6 +36,50 @@ $selected_month = isset($_GET['month'])
  */
 if ($selected_month < 1 || $selected_month > 12) {
     $selected_month = $current_month;
+}
+
+/*
+ * Build available years.
+ */
+$available_years = array();
+
+foreach ($available_periods as $period) {
+
+    $year = (int) $period['year'];
+
+    if (!in_array($year, $available_years, true)) {
+        $available_years[] = $year;
+    }
+}
+
+/*
+ * Check whether the currently selected period actually exists.
+ */
+$selected_period_exists = false;
+
+foreach ($available_periods as $period) {
+
+    if (
+        (int) $period['year'] === $selected_year &&
+        (int) $period['month'] === $selected_month
+    ) {
+        $selected_period_exists = true;
+        break;
+    }
+}
+
+/*
+ * If the requested period doesn't exist, use the newest available period.
+ */
+if (
+    !$selected_period_exists &&
+    !empty($available_periods)
+) {
+    $selected_year =
+        (int) $available_periods[0]['year'];
+
+    $selected_month =
+        (int) $available_periods[0]['month'];
 }
 
 $on_time = tlk_get_on_time_delivery(
@@ -113,43 +162,59 @@ $select_employee = tlk_select_employee();
             <h1>Production Dashboard</h1>
         </div>
         <div class="dashboard-month-filter">
-
+            <span>Filter by month & year:</span>
             <form class="prod-dash-form" method="GET">
-
                 <select
                     name="month"
                     onchange="this.form.submit()"
                 >
-                    <?php for ($month = 1; $month <= 12; $month++) : ?>
+
+                    <?php foreach ($available_periods as $period) : ?>
+
+                        <?php
+                        $period_year  = (int) $period['year'];
+                        $period_month = (int) $period['month'];
+
+                        /*
+                        * Only show months that exist
+                        * for the currently selected year.
+                        */
+                        if ($period_year !== $selected_year) {
+                            continue;
+                        }
+                        ?>
 
                         <option
-                            value="<?php echo esc_attr($month); ?>"
-                            <?php selected($selected_month, $month); ?>
+                            value="<?php echo esc_attr($period_month); ?>"
+                            <?php selected($selected_month, $period_month); ?>
                         >
                             <?php
                             echo esc_html(
                                 wp_date(
                                     'F',
-                                    mktime(0, 0, 0, $month, 1)
+                                    mktime(
+                                        0,
+                                        0,
+                                        0,
+                                        $period_month,
+                                        1,
+                                        $period_year
+                                    )
                                 )
                             );
                             ?>
                         </option>
 
-                    <?php endfor; ?>
+                    <?php endforeach; ?>
+
                 </select>
 
                 <select
                     name="year"
                     onchange="this.form.submit()"
                 >
-                    <?php
-                    for (
-                        $year = $current_year - 2;
-                        $year <= $current_year;
-                        $year++
-                    ) :
-                    ?>
+
+                    <?php foreach ($available_years as $year) : ?>
 
                         <option
                             value="<?php echo esc_attr($year); ?>"
@@ -158,7 +223,8 @@ $select_employee = tlk_select_employee();
                             <?php echo esc_html($year); ?>
                         </option>
 
-                    <?php endfor; ?>
+                    <?php endforeach; ?>
+
                 </select>
 
             </form>

@@ -827,6 +827,120 @@ function tlk_get_past_due_open_quantity() {
 }
 
 /**
+ * Get all month/year combinations that have relevant dashboard activity.
+ *
+ * Uses:
+ * - Production entry dates from wp_tlk_production
+ * - Historical order due dates from wp_tlk_order_history
+ *
+ * This allows historical months to remain selectable even if there are
+ * no production entries for that month.
+ */
+function tlk_get_available_dashboard_periods() {
+    global $wpdb;
+
+    $periods = array();
+
+    /*
+     * =========================================
+     * Production entry periods
+     * =========================================
+     */
+    if (tlk_production_table_exists()) {
+
+        $production_table = $wpdb->prefix . 'tlk_production';
+
+        $production_periods = $wpdb->get_results(
+            "SELECT DISTINCT
+                YEAR(entry_date) AS year,
+                MONTH(entry_date) AS month
+             FROM {$production_table}
+             WHERE entry_date IS NOT NULL
+             ORDER BY year DESC, month DESC",
+            ARRAY_A
+        );
+
+        foreach ($production_periods as $period) {
+
+            $year  = (int) $period['year'];
+            $month = (int) $period['month'];
+
+            if (!$year || !$month) {
+                continue;
+            }
+
+            $key = sprintf(
+                '%04d-%02d',
+                $year,
+                $month
+            );
+
+            $periods[$key] = array(
+                'year'  => $year,
+                'month' => $month,
+            );
+        }
+    }
+
+    /*
+     * =========================================
+     * Historical schedule periods
+     * =========================================
+     *
+     * Use due_date here instead of shipped_date.
+     *
+     * Example:
+     * Due: August 31
+     * Shipped: September 10
+     *
+     * August should still be considered a month
+     * where schedule activity existed.
+     */
+    if (tlk_order_history_table_exists()) {
+
+        $history_table = $wpdb->prefix . 'tlk_order_history';
+
+        $history_periods = $wpdb->get_results(
+            "SELECT DISTINCT
+                YEAR(due_date) AS year,
+                MONTH(due_date) AS month
+             FROM {$history_table}
+             WHERE due_date IS NOT NULL
+             ORDER BY year DESC, month DESC",
+            ARRAY_A
+        );
+
+        foreach ($history_periods as $period) {
+
+            $year  = (int) $period['year'];
+            $month = (int) $period['month'];
+
+            if (!$year || !$month) {
+                continue;
+            }
+
+            $key = sprintf(
+                '%04d-%02d',
+                $year,
+                $month
+            );
+
+            $periods[$key] = array(
+                'year'  => $year,
+                'month' => $month,
+            );
+        }
+    }
+
+    /*
+     * Sort newest to oldest.
+     */
+    krsort($periods);
+
+    return array_values($periods);
+}
+
+/**
  * Get on-time delivery stats for a month.
  */
 function tlk_get_on_time_delivery($year, $month) {

@@ -34,7 +34,7 @@
 }
 
 /* Form fields */
-.dash-container label {
+.dash-container label, .dash-container span {
     display: block;
     margin-bottom: 0.35rem;
     font-weight: 600;
