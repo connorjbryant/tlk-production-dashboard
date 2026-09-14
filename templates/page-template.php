@@ -12,6 +12,9 @@ $schedule_rows = tlk_get_saved_schedule();
 $total_open = tlk_get_total_open_orders();
 $past_due = tlk_get_past_due_open_quantity();
 
+// Quota
+$cnc_quota = cnc_quota();
+
 /*
  * Dashboard month/year filtering.
  */
@@ -329,6 +332,13 @@ $edit_redirect = add_query_arg(
     </section>
 
     <?php } ?>
+
+    <div class="dash-container__header">
+        <div>
+            <h1>Production Statistics</h1>
+        </div>
+        <p><?php echo esc_html($cnc_quota); ?></p>
+    </div>
 
     <div class="dash-container__header">
         <div>

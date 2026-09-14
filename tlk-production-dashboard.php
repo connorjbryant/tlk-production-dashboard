@@ -1273,3 +1273,34 @@ add_filter(
     PHP_INT_MAX,
     3
 );
+
+/* Check if CNC has made at least 60 parts this month */
+function cnc_quota(){
+    global $wpdb;
+
+    $target_num = 60;
+
+    $table_name = $wpdb->prefix . 'tlk_production';
+
+    $current_year = (int) wp_date('Y');
+    $current_month = (int) wp_date('n');
+
+    $result = $wpdb->get_var(
+        $wpdb->prepare(
+            "SELECT COALESCE(SUM(qty), 0)
+            FROM {$table_name}
+            WHERE department = %s
+                AND YEAR(entry_date) = %d
+                AND MONTH(entry_date) = %d",
+            'cnc',
+            $current_year,
+            $current_month
+        )
+    );
+
+    if ((int) $result >= $target_num){
+        return 'CNC: Good job';
+    } else {
+        return 'CNC: Did not meet quota';
+    }
+}
