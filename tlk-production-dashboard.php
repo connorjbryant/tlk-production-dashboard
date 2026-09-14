@@ -1292,7 +1292,7 @@ function cnc_quota(){
             WHERE department = %s
                 AND YEAR(entry_date) = %d
                 AND MONTH(entry_date) = %d",
-            'cnc',
+            'CNC',
             $current_year,
             $current_month
         )

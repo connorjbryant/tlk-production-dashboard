@@ -123,8 +123,8 @@ $edit_redirect = add_query_arg(
             <div class="dash-container__bg">
                 <label for="department">Department:</label>
                 <select name="department" id="department" required>
-                    <option value="cnc">CNC</option>
-                    <option value="pour">Pouring</option>
+                    <option value="CNC">CNC</option>
+                    <option value="Pour">Pouring</option>
                     <option value="Build">Build</option>
                 </select>
             </div>
