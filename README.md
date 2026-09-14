@@ -1,6 +1,6 @@
 # TLK Schedule Sync
 
-WordPress displays a live schedule that starts in QuickBooks and is cleaned in Google Sheets.
+WordPress displays a live schedule and dashboard report that starts in QuickBooks and is cleaned in Google Sheets.
 
 Google Sheets is the source of truth. You upload a QuickBooks CSV, Apps Script builds the **Clean Schedule** sheet, and WordPress copies that sheet into its database when the dashboard loads.
 
@@ -10,7 +10,7 @@ Google Sheets is the source of truth. You upload a QuickBooks CSV, Apps Script b
 - Clean and normalize rows with Apps Script
 - Expose the clean schedule as JSON from an Apps Script web app
 - Sync that JSON into the WordPress table `wp_tlk_schedule`
-- Render the saved rows as an HTML table on the dashboard
+- Render the saved data inside WordPress
 
 ## Data flow
 
@@ -23,9 +23,7 @@ Google Sheets is the source of truth. You upload a QuickBooks CSV, Apps Script b
 7. WordPress `get_schedule_data()` retrieves the JSON
 8. `tlk_sync_schedule_to_database()` saves the data to WordPress
 9. Data is stored in **`wp_tlk_schedule`**
-10. `tlk_get_saved_schedule()` reads the WordPress database table
-11. Results are stored in **`$schedule_rows`**
-12. WordPress **HTML table** displays the data
+10. Other data is stored in **`tlk_production`**
 
 In short: Visit the dashboard and WordPress contacts Google. Then the WordPress table is rebuilt and the plugin displays the table.
 
@@ -60,7 +58,9 @@ On each successful sync:
 2. The latest Google rows are inserted.
 3. The dashboard reads only from this table.
 
-## Usage
+Also, production team leads store how many parts are produced in `tlk_production`.
+
+## Usage (Spreadsheet Side)
 
 1. Export the schedule CSV from QuickBooks.
 2. Upload it to the Google Sheet **Raw** tab.
@@ -69,16 +69,6 @@ On each successful sync:
 5. Confirm the HTML table matches **Clean Schedule**.
 
 ## Troubleshooting
-
-**The WordPress table is empty**
-- Confirm the Apps Script web app is deployed and the `/exec` URL is current.
-- Open the URL in a browser and confirm it returns JSON, not an HTML Google login page.
-- Check that `doGet()` is returning an array.
-
-**WordPress shows old rows**
-- The sync runs when the dashboard loads. Refresh that page.
-- Confirm `tlk_sync_schedule_to_database()` is actually being called on load.
-- Confirm `buildCleanSchedule()` has rebuilt **Clean Schedule** after the latest CSV upload.
 
 **Apps Script returns HTML instead of JSON**
 - The web app access setting is too strict, or the deployment is not the latest version.
