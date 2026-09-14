@@ -946,18 +946,7 @@ function tlk_get_available_dashboard_periods() {
 function tlk_get_on_time_delivery($year, $month) {
     global $wpdb;
 
-    if (!tlk_order_history_table_exists()) {
-        return array(
-            'total'   => 0,
-            'on_time' => 0,
-            'percent' => null,
-        );
-    }
-
     $table_name = $wpdb->prefix . 'tlk_order_history';
-
-    $year  = absint($year);
-    $month = absint($month);
 
     $start_date = sprintf(
         '%04d-%02d-01',
@@ -965,47 +954,47 @@ function tlk_get_on_time_delivery($year, $month) {
         $month
     );
 
-    $start = new DateTimeImmutable(
-        $start_date,
-        wp_timezone()
+    $end_date = gmdate(
+        'Y-m-d',
+        strtotime($start_date . ' +1 month')
     );
 
-    $end = $start->modify('+1 month');
-
-    $stats = $wpdb->get_row(
+    $orders = $wpdb->get_results(
         $wpdb->prepare(
             "SELECT
-                COUNT(*) AS total,
-                SUM(on_time) AS on_time
+                po_number,
+                due_date,
+                shipped_date,
+                on_time
              FROM {$table_name}
              WHERE shipped_date >= %s
-               AND shipped_date < %s",
-            $start->format('Y-m-d'),
-            $end->format('Y-m-d')
+               AND shipped_date < %s
+             ORDER BY shipped_date ASC, po_number ASC",
+            $start_date,
+            $end_date
         ),
         ARRAY_A
     );
 
-    $total = isset($stats['total'])
-        ? (int) $stats['total']
-        : 0;
+    $total = count($orders);
 
-    $on_time = isset($stats['on_time'])
-        ? (int) $stats['on_time']
-        : 0;
+    $on_time = 0;
 
-    if ($total === 0) {
-        return array(
-            'total'   => 0,
-            'on_time' => 0,
-            'percent' => null,
-        );
+    foreach ($orders as $order) {
+        if ((int) $order['on_time'] === 1) {
+            $on_time++;
+        }
     }
 
+    $percent = $total > 0
+        ? ($on_time / $total) * 100
+        : null;
+
     return array(
-        'total'   => $total,
+        'percent' => $percent,
         'on_time' => $on_time,
-        'percent' => ($on_time / $total) * 100,
+        'total'   => $total,
+        'orders'  => $orders,
     );
 }
 

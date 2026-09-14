@@ -311,6 +311,7 @@ $select_employee = tlk_select_employee();
                         </p>
 
                         <p>
+                            <strong>On-time delivery rate:</strong> (Number of On-Time Deliveries / Total Number of Deliveries) × 100
                             <strong>Calculation:</strong>
                             <?php echo esc_html($on_time['on_time']); ?>
                             ÷
@@ -331,6 +332,70 @@ $select_employee = tlk_select_employee();
                             Based on orders recorded in the order history table
                             with a shipped date in the selected month.
                         </p>
+                        <?php if (!empty($on_time['orders'])) : ?>
+
+                        <div class="dashboard-card__order-list">
+
+                            <strong>Orders included:</strong>
+
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>PO</th>
+                                        <th>Due</th>
+                                        <th>Shipped</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+
+                                <tbody>
+
+                                    <?php foreach ($on_time['orders'] as $order) : ?>
+
+                                        <tr>
+                                            <td>
+                                                <?php echo esc_html($order['po_number']); ?>
+                                            </td>
+
+                                            <td>
+                                                <?php
+                                                echo esc_html(
+                                                    wp_date(
+                                                        'M j, Y',
+                                                        strtotime($order['due_date'])
+                                                    )
+                                                );
+                                                ?>
+                                            </td>
+
+                                            <td>
+                                                <?php
+                                                echo esc_html(
+                                                    wp_date(
+                                                        'M j, Y',
+                                                        strtotime($order['shipped_date'])
+                                                    )
+                                                );
+                                                ?>
+                                            </td>
+
+                                            <td>
+                                                <?php if ((int) $order['on_time'] === 1) : ?>
+                                                    On Time
+                                                <?php else : ?>
+                                                    Late
+                                                <?php endif; ?>
+                                            </td>
+                                        </tr>
+
+                                    <?php endforeach; ?>
+
+                                </tbody>
+                            </table>
+
+                        </div>
+
+                    <?php endif; ?>
 
                     </div>
                 </details>

@@ -122,6 +122,10 @@
     font-weight: 600;
 }
 
+.dashboard-card__details-note a {
+    text-decoration: underline;
+}
+
 /* Mobile */
 @media (max-width: 768px) {
     .dash-container {
