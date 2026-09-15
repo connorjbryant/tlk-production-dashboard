@@ -5,7 +5,7 @@
 get_header();
 
 // Eventually remove this once the real hostinger cron is in place
-$sync_result = tlk_sync_schedule_to_database();
+// $sync_result = tlk_sync_schedule_to_database();
 
 $schedule_rows = tlk_get_saved_schedule();
 
@@ -18,67 +18,13 @@ $pouring_quota = pouring_quota();
 $building_quota = building_quota();
 
 /*
- * Dashboard month/year filtering.
+ * Dashboard always displays the current month/year.
+ * Historical order data remains stored in the database.
  */
-$current_year = (int) wp_date("Y");
-$current_month = (int) wp_date("n");
+$current_year  = (int) wp_date('Y');
+$current_month = (int) wp_date('n');
 
-$available_periods = tlk_get_available_dashboard_periods();
-
-/*
- * Default to current month/year.
- */
-$selected_year = isset($_GET["year"]) ? absint($_GET["year"]) : $current_year;
-
-$selected_month = isset($_GET["month"])
-    ? absint($_GET["month"])
-    : $current_month;
-
-/*
- * Prevent invalid month values.
- */
-if ($selected_month < 1 || $selected_month > 12) {
-    $selected_month = $current_month;
-}
-
-/*
- * Build available years.
- */
-$available_years = [];
-
-foreach ($available_periods as $period) {
-    $year = (int) $period["year"];
-
-    if (!in_array($year, $available_years, true)) {
-        $available_years[] = $year;
-    }
-}
-
-/*
- * Check whether the currently selected period actually exists.
- */
-$selected_period_exists = false;
-
-foreach ($available_periods as $period) {
-    if (
-        (int) $period["year"] === $selected_year &&
-        (int) $period["month"] === $selected_month
-    ) {
-        $selected_period_exists = true;
-        break;
-    }
-}
-
-/*
- * If the requested period doesn't exist, use the newest available period.
- */
-if (!$selected_period_exists && !empty($available_periods)) {
-    $selected_year = (int) $available_periods[0]["year"];
-
-    $selected_month = (int) $available_periods[0]["month"];
-}
-
-$on_time = tlk_get_on_time_delivery($selected_year, $selected_month);
+$on_time = tlk_get_on_time_delivery($current_year, $current_month);
 
 /* Employee select */
 $select_employee = tlk_select_employee();
@@ -86,13 +32,7 @@ $select_employee = tlk_select_employee();
 /* Current user's entries that are still inside the 24-hour edit window. */
 $editable_entries = tlk_get_current_user_editable_entries();
 
-$edit_redirect = add_query_arg(
-    array(
-        'month' => $selected_month,
-        'year'  => $selected_year,
-    ),
-    get_permalink()
-);
+$edit_redirect = get_permalink();
 ?>
 
 <main class="dash-container">
@@ -111,72 +51,87 @@ $edit_redirect = add_query_arg(
 
     <div class="dash-container__form">
         <h1>Production Entry Log</h1>
-        <form action="<?php echo esc_url(
-            admin_url("admin-post.php")
-        ); ?>" method="POST">
+        <p>Add everyone who worked in the department, then save all entries at once.</p>
 
+        <form action="<?php echo esc_url(admin_url('admin-post.php')); ?>" method="POST">
             <input type="hidden" name="action" value="save_custom_get_data">
 
-            <?php wp_nonce_field(
-                "tlk_production_entry",
-                "tlk_production_nonce"
-            ); ?>
+            <?php wp_nonce_field('tlk_production_entry', 'tlk_production_nonce'); ?>
 
             <div class="dash-container__bg">
                 <label for="department">Department:</label>
                 <select name="department" id="department" required>
                     <option value="CNC">CNC</option>
-                    <option value="Pour">Pouring</option>
-                    <option value="Build">Build</option>
+                    <option value="Pouring">Pouring</option>
+                    <option value="Building">Building</option>
                 </select>
             </div>
 
-            <div class="dash-container__bg">
-                <label for="employee">Employee:</label>
+            <div class="production-entry-list" id="production-entry-list">
+                <div class="production-entry-row">
+                    <div class="production-entry-field">
+                        <label>Employee:</label>
+                        <select name="employee[]" class="production-employee" required>
+                            <option value="">Select an employee</option>
+                            <?php foreach ($select_employee as $employee): ?>
+                                <option value="<?php echo esc_attr($employee); ?>">
+                                    <?php echo esc_html($employee); ?>
+                                </option>
+                            <?php endforeach; ?>
+                            <option value="__new__">+ Add new employee</option>
+                        </select>
+                        <input
+                            type="text"
+                            name="new_employee[]"
+                            class="production-new-employee"
+                            placeholder="New employee name"
+                            style="display:none;"
+                        >
+                    </div>
 
-                <select name="employee" id="employee" required>
-                    <option value="">Select an employee</option>
+                    <div class="production-entry-field">
+                        <label>Quantity produced:</label>
+                        <input type="number" name="qty[]" min="0" required>
+                    </div>
 
-                    <?php foreach ($select_employee as $employee): ?>
-
-                        <option value="<?php echo esc_attr($employee); ?>">
-                            <?php echo esc_html($employee); ?>
-                        </option>
-
-                    <?php endforeach; ?>
-
-                    <option value="__new__">+ Add new employee</option>
-                </select>
-
-                <div id="new-employee-wrap" style="display: none;">
-
-                    <label for="new_employee">
-                        New Employee:
-                    </label>
-
-                    <input
-                        type="text"
-                        id="new_employee"
-                        name="new_employee"
-                    >
-
+                    <button type="button" class="production-remove-row" aria-label="Remove employee entry">Remove</button>
                 </div>
             </div>
 
-            <div class="dash-container__bg">
-                <label for="qty">Enter quantity of parts produced:</label>
-                <input
-                    type="number"
-                    id="qty"
-                    name="qty"
-                    min="0"
-                    required
-                >
-            </div>
-
-            <input type="submit" class="prod-entry-submit" value="Submit">
-
+            <button type="button" class="production-add-row" id="production-add-row">+ Add Another Person</button>
+            <input type="submit" class="prod-entry-submit" value="Save All Entries">
         </form>
+
+        <template id="production-entry-template">
+            <div class="production-entry-row">
+                <div class="production-entry-field">
+                    <label>Employee:</label>
+                    <select name="employee[]" class="production-employee" required>
+                        <option value="">Select an employee</option>
+                        <?php foreach ($select_employee as $employee): ?>
+                            <option value="<?php echo esc_attr($employee); ?>">
+                                <?php echo esc_html($employee); ?>
+                            </option>
+                        <?php endforeach; ?>
+                        <option value="__new__">+ Add new employee</option>
+                    </select>
+                    <input
+                        type="text"
+                        name="new_employee[]"
+                        class="production-new-employee"
+                        placeholder="New employee name"
+                        style="display:none;"
+                    >
+                </div>
+
+                <div class="production-entry-field">
+                    <label>Quantity produced:</label>
+                    <input type="number" name="qty[]" min="0" required>
+                </div>
+
+                <button type="button" class="production-remove-row" aria-label="Remove employee entry">Remove</button>
+            </div>
+        </template>
     </div>
 
     <section class="dash-container__recent-entries">
@@ -372,72 +327,16 @@ $edit_redirect = add_query_arg(
     <div class="dash-container__header">
         <div>
             <h1>Order Statistics</h1>
-        </div>
-        <div class="dashboard-month-filter">
-            <span>Filter by month & year:</span>
-            <form class="prod-dash-form" method="GET">
-                <select
-                    name="month"
-                    onchange="this.form.submit()"
-                >
-
-                    <?php foreach ($available_periods as $period): ?>
-
-                        <?php
-                        $period_year = (int) $period["year"];
-                        $period_month = (int) $period["month"];
-
-                        /*
-                         * Only show months that exist
-                         * for the currently selected year.
-                         */
-                        if ($period_year !== $selected_year) {
-                            continue;
-                        }
-                        ?>
-
-                        <option
-                            value="<?php echo esc_attr($period_month); ?>"
-                            <?php selected($selected_month, $period_month); ?>
-                        >
-                            <?php echo esc_html(
-                                wp_date(
-                                    "F",
-                                    mktime(
-                                        0,
-                                        0,
-                                        0,
-                                        $period_month,
-                                        1,
-                                        $period_year
-                                    )
-                                )
-                            ); ?>
-                        </option>
-
-                    <?php endforeach; ?>
-
-                </select>
-
-                <select
-                    name="year"
-                    onchange="this.form.submit()"
-                >
-
-                    <?php foreach ($available_years as $year): ?>
-
-                        <option
-                            value="<?php echo esc_attr($year); ?>"
-                            <?php selected($selected_year, $year); ?>
-                        >
-                            <?php echo esc_html($year); ?>
-                        </option>
-
-                    <?php endforeach; ?>
-
-                </select>
-
-            </form>
+            <p>
+                <?php
+                echo esc_html(
+                    wp_date(
+                        'F Y',
+                        mktime(0, 0, 0, $current_month, 1, $current_year)
+                    )
+                );
+                ?>
+            </p>
         </div>
     </div>
 
@@ -492,7 +391,7 @@ $edit_redirect = add_query_arg(
                     <div class="dashboard-card__details-content">
 
                         <p>
-                            <strong>Selected period:</strong>
+                            <strong>Current period:</strong>
                             <?php
                             echo esc_html(
                                 wp_date(
@@ -501,9 +400,9 @@ $edit_redirect = add_query_arg(
                                         0,
                                         0,
                                         0,
-                                        $selected_month,
+                                        $current_month,
                                         1,
-                                        $selected_year
+                                        $current_year
                                     )
                                 )
                             );
@@ -549,7 +448,7 @@ $edit_redirect = add_query_arg(
 
                         <p class="dashboard-card__details-note">
                             Based on orders recorded in the order history table
-                            with a shipped date in the selected month.
+                            with a shipped date in the current month.
                         </p>
                         <?php if (!empty($on_time['orders'])) : ?>
 

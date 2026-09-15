@@ -1,36 +1,56 @@
 jQuery(document).ready(function ($) {
-
     var summaryTitle = $('.dashboard-card__details');
-    var summaryContent = $('.dashboard-card__details-content');
-    var toggleMsg = $('.toggle-msg');
 
-    $('#employee').on('change', function () {
+    function updateRemoveButtons() {
+        var rows = $('#production-entry-list .production-entry-row');
+        rows.find('.production-remove-row').prop('disabled', rows.length === 1);
+    }
 
-        if ($(this).val() === '__new__') {
+    function handleEmployeeChange(select) {
+        var $select = $(select);
+        var $row = $select.closest('.production-entry-row');
+        var $newEmployee = $row.find('.production-new-employee');
 
-            $('#new-employee-wrap').show();
-
-            $('#new_employee')
-                .prop('required', true)
-                .focus();
-
+        if ($select.val() === '__new__') {
+            $newEmployee.show().prop('required', true).focus();
         } else {
-
-            $('#new-employee-wrap').hide();
-
-            $('#new_employee')
-                .prop('required', false)
-                .val('');
+            $newEmployee.hide().prop('required', false).val('');
         }
+    }
 
+    $(document).on('change', '.production-employee', function () {
+        handleEmployeeChange(this);
     });
 
-    summaryTitle.on('toggle', function(){
-        if (this.open){
-            summaryTitle.addClass("active-summary");
-        } else {
-            summaryTitle.removeClass("active-summary");
+    $('#production-add-row').on('click', function () {
+        var template = document.getElementById('production-entry-template');
+
+        if (!template) {
+            return;
         }
+
+        $('#production-entry-list').append(template.content.cloneNode(true));
+        updateRemoveButtons();
     });
 
+    $(document).on('click', '.production-remove-row', function () {
+        var $rows = $('#production-entry-list .production-entry-row');
+
+        if ($rows.length <= 1) {
+            return;
+        }
+
+        $(this).closest('.production-entry-row').remove();
+        updateRemoveButtons();
+    });
+
+    updateRemoveButtons();
+
+    summaryTitle.on('toggle', function () {
+        if (this.open) {
+            $(this).addClass('active-summary');
+        } else {
+            $(this).removeClass('active-summary');
+        }
+    });
 });

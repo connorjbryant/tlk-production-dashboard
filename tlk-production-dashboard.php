@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 1.1.1
+ * Version: 1.1.4
  * Author: Connor Bryant
  * License: GPL-2.0+
  */
@@ -18,7 +18,7 @@ function tlk_dash_enqueue_assets(){
         'tlk_dash_styles',
         plugins_url('css/tlk-dash.css', __FILE__),
         array(),
-        '1.1.1',
+        '1.1.4',
         'all'
     );
 
@@ -27,7 +27,7 @@ function tlk_dash_enqueue_assets(){
         'tlk_dash_script',
         plugins_url('js/tlk-dash.js', __FILE__),
         array('jquery'),
-        '1.1.1',
+        '1.1.4',
         true
     );
 }
@@ -303,6 +303,50 @@ function tlk_order_history_table_exists() {
 }
 
 /**
+ * Create persistent registry of POs that have appeared on the TLK schedule.
+ * This table is not truncated during normal schedule syncs.
+ */
+function tlk_create_seen_orders_table() {
+    global $wpdb;
+
+    $table_name      = $wpdb->prefix . 'tlk_seen_orders';
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $sql = "CREATE TABLE {$table_name} (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        po_number VARCHAR(100) NOT NULL,
+        due_date DATE DEFAULT NULL,
+        first_seen DATETIME NOT NULL,
+        last_seen DATETIME NOT NULL,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        shipped_recorded TINYINT(1) NOT NULL DEFAULT 0,
+        PRIMARY KEY (id),
+        UNIQUE KEY po_number (po_number),
+        KEY is_active (is_active),
+        KEY shipped_recorded (shipped_recorded)
+    ) {$charset_collate};";
+
+    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    dbDelta($sql);
+}
+
+/**
+ * Make sure persistent seen-orders table exists.
+ */
+function tlk_seen_orders_table_exists() {
+    global $wpdb;
+
+    $table_name = $wpdb->prefix . 'tlk_seen_orders';
+    $exists = $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table_name));
+
+    if ($exists !== $table_name) {
+        tlk_create_seen_orders_table();
+    }
+
+    return $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table_name)) === $table_name;
+}
+
+/**
  * Convert TLK schedule date to YYYY-MM-DD.
  */
 function tlk_normalize_schedule_date($date_string) {
@@ -341,6 +385,11 @@ register_activation_hook(
     'tlk_create_order_history_table'
 );
 
+register_activation_hook(
+    __FILE__,
+    'tlk_create_seen_orders_table'
+);
+
 /**
  * Make sure TLK production table exists
  */
@@ -373,18 +422,20 @@ function tlk_production_table_exists() {
  */
 function handle_production_form_submission() {
 
-    // Security check
     if (
         !isset($_POST['tlk_production_nonce']) ||
         !wp_verify_nonce(
-            $_POST['tlk_production_nonce'],
+            sanitize_text_field(wp_unslash($_POST['tlk_production_nonce'])),
             'tlk_production_entry'
         )
     ) {
         wp_die('Security check failed.');
     }
 
-    // Make sure required fields exist
+    if (!current_user_can('read')) {
+        wp_die('You are not allowed to submit production entries.');
+    }
+
     if (
         !isset($_POST['department']) ||
         !isset($_POST['employee']) ||
@@ -393,59 +444,81 @@ function handle_production_form_submission() {
         wp_die('Missing required parameters.');
     }
 
-    // Sanitize form values
-    $department = sanitize_text_field($_POST['department']);
-    $employee = sanitize_text_field($_POST['employee']);
+    $department = sanitize_text_field(wp_unslash($_POST['department']));
+    $employees  = (array) wp_unslash($_POST['employee']);
+    $quantities = (array) wp_unslash($_POST['qty']);
+    $new_names  = isset($_POST['new_employee'])
+        ? (array) wp_unslash($_POST['new_employee'])
+        : array();
 
-    if ($employee === '__new__') {
+    $allowed_departments = array('CNC', 'Pouring', 'Building');
 
-        $employee = isset($_POST['new_employee'])
-            ? sanitize_text_field($_POST['new_employee'])
-            : '';
-
-        if ($employee === '') {
-            wp_die('Please enter the new employee name.');
-        }
+    if (!in_array($department, $allowed_departments, true)) {
+        wp_die('Invalid department.');
     }
-    $qty        = absint($_POST['qty']);
+
+    if (count($employees) !== count($quantities)) {
+        wp_die('Each employee must have a production quantity.');
+    }
 
     global $wpdb;
 
-    // Make sure production table exists
     if (!tlk_production_table_exists()) {
         wp_die('Production table does not exist.');
     }
 
     $table_name = $wpdb->prefix . 'tlk_production';
+    $entry_date = current_time('mysql');
+    $inserted   = 0;
 
-    $inserted = $wpdb->insert(
-        $table_name,
-        array(
-            'user_id'    => get_current_user_id(),
-            'department' => $department,
-            'employee'   => $employee,
-            'qty'        => $qty,
-            'entry_date' => current_time('mysql'),
-        ),
-        array(
-            '%d',
-            '%s',
-            '%s',
-            '%d',
-            '%s',
-        )
-    );
+    foreach ($employees as $index => $employee_raw) {
+        $employee = sanitize_text_field($employee_raw);
+        $qty_raw  = isset($quantities[$index]) ? $quantities[$index] : '';
 
-    // Redirect so refreshing doesn't submit again
-    if ($inserted !== false) {
-        wp_safe_redirect(home_url('/production-entry-success/'));
-        exit;
+        if ($employee === '' || $qty_raw === '') {
+            continue;
+        }
+
+        if ($employee === '__new__') {
+            $employee = isset($new_names[$index])
+                ? sanitize_text_field($new_names[$index])
+                : '';
+
+            if ($employee === '') {
+                wp_die('Please enter the new employee name for each new employee row.');
+            }
+        }
+
+        $qty = absint($qty_raw);
+
+        $result = $wpdb->insert(
+            $table_name,
+            array(
+                'user_id'    => get_current_user_id(),
+                'department' => $department,
+                'employee'   => $employee,
+                'qty'        => $qty,
+                'entry_date' => $entry_date,
+            ),
+            array('%d', '%s', '%s', '%d', '%s')
+        );
+
+        if ($result === false) {
+            wp_die(
+                'Database insertion failed: ' .
+                esc_html($wpdb->last_error)
+            );
+        }
+
+        $inserted++;
     }
 
-    wp_die(
-        'Database insertion failed: ' .
-        esc_html($wpdb->last_error)
-    );
+    if ($inserted < 1) {
+        wp_die('Please add at least one employee and quantity.');
+    }
+
+    wp_safe_redirect(home_url('/production-entry-success/'));
+    exit;
 }
 
 add_action(
@@ -611,233 +684,208 @@ add_action(
 function tlk_sync_schedule_to_database() {
     global $wpdb;
 
-    $table_name   = $wpdb->prefix . 'tlk_schedule';
+    $table_name    = $wpdb->prefix . 'tlk_schedule';
     $history_table = $wpdb->prefix . 'tlk_order_history';
+    $seen_table    = $wpdb->prefix . 'tlk_seen_orders';
 
-    /*
-     * Make sure database tables exist.
-     */
     if (!tlk_schedule_table_exists()) {
-        return new WP_Error(
-            'table_missing',
-            'Could not create the schedule database table. Database error: ' .
-            $wpdb->last_error
-        );
+        return new WP_Error('table_missing', 'Could not create the schedule database table. Database error: ' . $wpdb->last_error);
     }
 
     if (!tlk_order_history_table_exists()) {
-        return new WP_Error(
-            'history_table_missing',
-            'Could not create the order history table. Database error: ' .
-            $wpdb->last_error
-        );
+        return new WP_Error('history_table_missing', 'Could not create the order history table. Database error: ' . $wpdb->last_error);
     }
 
-    /*
-     * Get fresh Google Sheet data.
-     */
+    if (!tlk_seen_orders_table_exists()) {
+        return new WP_Error('seen_table_missing', 'Could not create the seen-orders database table. Database error: ' . $wpdb->last_error);
+    }
+
     $rows = get_schedule_data();
 
     if (empty($rows) || !is_array($rows)) {
-        return new WP_Error(
-            'no_google_data',
-            'No schedule data was returned from Google.'
-        );
+        return new WP_Error('no_google_data', 'No schedule data was returned from Google.');
     }
 
-    /*
-     * =========================================
-     * Capture orders currently in WordPress.
-     * =========================================
-     *
-     * These represent the schedule BEFORE the
-     * newest Google data replaces it.
-     */
-    $old_rows = $wpdb->get_results(
-        "SELECT po_number, due_date
-         FROM {$table_name}
-         WHERE po_number != ''",
+    // Build one current record per PO from the fresh Google schedule.
+    $current_orders = array();
+
+    foreach ($rows as $row) {
+        $po = isset($row['P.O.']) ? trim((string) $row['P.O.']) : '';
+        if ($po === '') {
+            continue;
+        }
+
+        $due_date = isset($row['DUE']) ? tlk_normalize_schedule_date($row['DUE']) : null;
+
+        if (!isset($current_orders[$po])) {
+            $current_orders[$po] = array('due_date' => $due_date);
+        } elseif (empty($current_orders[$po]['due_date']) && !empty($due_date)) {
+            $current_orders[$po]['due_date'] = $due_date;
+        }
+    }
+
+    // Bootstrap the persistent registry from the existing saved snapshot on the first upgraded sync.
+    $seen_count = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$seen_table}");
+    if ($seen_count === 0) {
+        $saved_orders = $wpdb->get_results(
+            "SELECT po_number, due_date FROM {$table_name} WHERE po_number != ''",
+            ARRAY_A
+        );
+        $bootstrap_time = current_time('mysql');
+
+        foreach ((array) $saved_orders as $saved_order) {
+            $po = trim((string) ($saved_order['po_number'] ?? ''));
+            if ($po === '') {
+                continue;
+            }
+
+            $due_date = tlk_normalize_schedule_date($saved_order['due_date'] ?? '');
+            $wpdb->query($wpdb->prepare(
+                "INSERT INTO {$seen_table} (po_number, due_date, first_seen, last_seen, is_active, shipped_recorded)
+                 VALUES (%s, %s, %s, %s, 1, 0)
+                 ON DUPLICATE KEY UPDATE due_date = VALUES(due_date), last_seen = VALUES(last_seen), is_active = 1",
+                $po, $due_date, $bootstrap_time, $bootstrap_time
+            ));
+        }
+    }
+
+    $previously_active = $wpdb->get_results(
+        "SELECT po_number, due_date, shipped_recorded FROM {$seen_table} WHERE is_active = 1",
         ARRAY_A
     );
 
-    /*
-     * Build a unique list of old P.O.s.
-     */
-    $old_orders = array();
-
-    foreach ($old_rows as $old_row) {
-
-        $po = trim($old_row['po_number']);
-
-        if ($po === '') {
-            continue;
-        }
-
-        /*
-         * Only need one record per P.O.
-         */
-        if (!isset($old_orders[$po])) {
-            $old_orders[$po] = array(
-                'due_date' => $old_row['due_date'],
-            );
-        }
-    }
-
-    /*
-     * =========================================
-     * Build a list of P.O.s in NEW Google data.
-     * =========================================
-     */
-    $new_orders = array();
-
-    foreach ($rows as $row) {
-
-        $po = isset($row['P.O.'])
-            ? trim((string) $row['P.O.'])
-            : '';
-
-        if ($po === '') {
-            continue;
-        }
-
-        $new_orders[$po] = true;
-    }
-
-    /*
-     * =========================================
-     * Detect orders that disappeared.
-     * =========================================
-     *
-     * If an order existed before but is no
-     * longer on the schedule, treat it as shipped.
-     */
     $shipped_date = current_time('Y-m-d');
+    $now = current_time('mysql');
 
-    foreach ($old_orders as $po => $old_order) {
-
-        /*
-         * Still exists on schedule.
-         */
-        if (isset($new_orders[$po])) {
+    // Anything previously active but absent now is considered shipped.
+    foreach ((array) $previously_active as $old_order) {
+        $po = trim((string) ($old_order['po_number'] ?? ''));
+        if ($po === '' || isset($current_orders[$po])) {
             continue;
         }
 
-        /*
-         * Order disappeared.
-         * Treat this as its shipment date.
-         */
-        $due_date = tlk_normalize_schedule_date(
-            $old_order['due_date']
-        );
+        $due_date = !empty($old_order['due_date']) ? $old_order['due_date'] : null;
+        $on_time = ($due_date !== null && $shipped_date <= $due_date) ? 1 : 0;
 
-        /*
-         * Determine whether shipment was on time.
-         */
-        $on_time = 0;
+        $already_recorded = (int) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM {$history_table} WHERE po_number = %s",
+            $po
+        ));
 
-        if ($due_date !== null) {
-            $on_time = ($shipped_date <= $due_date) ? 1 : 0;
+        if ($already_recorded === 0) {
+            $inserted_history = $wpdb->insert(
+                $history_table,
+                array(
+                    'po_number'    => $po,
+                    'due_date'     => $due_date,
+                    'shipped_date' => $shipped_date,
+                    'on_time'      => $on_time,
+                ),
+                array('%s', '%s', '%s', '%d')
+            );
+
+            if ($inserted_history === false) {
+                return new WP_Error('history_insert_failed', 'Could not record shipment history for PO ' . $po . ': ' . $wpdb->last_error);
+            }
         }
 
-        /*
-         * Save shipment history.
-         */
-        $wpdb->insert(
-            $history_table,
+        $updated_seen = $wpdb->update(
+            $seen_table,
             array(
-                'po_number'    => $po,
-                'due_date'     => $due_date,
-                'shipped_date' => $shipped_date,
-                'on_time'      => $on_time,
+                'is_active'        => 0,
+                'shipped_recorded' => 1,
+                'last_seen'        => $now,
             ),
-            array(
-                '%s',
-                '%s',
-                '%s',
-                '%d',
-            )
+            array('po_number' => $po),
+            array('%d', '%d', '%s'),
+            array('%s')
         );
+
+        if ($updated_seen === false) {
+            return new WP_Error('seen_update_failed', 'Could not update persistent PO ' . $po . ': ' . $wpdb->last_error);
+        }
     }
 
-    /*
-     * =========================================
-     * Google Sheet is source of truth.
-     * Replace current schedule.
-     * =========================================
-     */
-    $deleted = $wpdb->query(
-        "TRUNCATE TABLE {$table_name}"
-    );
+    // Register/update every PO currently present in Google.
+    foreach ($current_orders as $po => $order_data) {
+        $existing = $wpdb->get_row($wpdb->prepare(
+            "SELECT id, is_active, shipped_recorded FROM {$seen_table} WHERE po_number = %s LIMIT 1",
+            $po
+        ), ARRAY_A);
 
+        if ($existing) {
+            // If a historically shipped PO reappears, keep shipped_recorded intact;
+            // history remains duplicate-safe if it disappears again.
+            $updated = $wpdb->update(
+                $seen_table,
+                array(
+                    'due_date'  => $order_data['due_date'],
+                    'last_seen' => $now,
+                    'is_active' => 1,
+                ),
+                array('po_number' => $po),
+                array('%s', '%s', '%d'),
+                array('%s')
+            );
+
+            if ($updated === false) {
+                return new WP_Error('seen_update_failed', 'Could not update persistent PO ' . $po . ': ' . $wpdb->last_error);
+            }
+        } else {
+            $inserted_seen = $wpdb->insert(
+                $seen_table,
+                array(
+                    'po_number'        => $po,
+                    'due_date'         => $order_data['due_date'],
+                    'first_seen'       => $now,
+                    'last_seen'        => $now,
+                    'is_active'        => 1,
+                    'shipped_recorded' => 0,
+                ),
+                array('%s', '%s', '%s', '%s', '%d', '%d')
+            );
+
+            if ($inserted_seen === false) {
+                return new WP_Error('seen_insert_failed', 'Could not register PO ' . $po . ': ' . $wpdb->last_error);
+            }
+        }
+    }
+
+    // Only replace the current snapshot after all detection/registry work succeeds.
+    $deleted = $wpdb->query("TRUNCATE TABLE {$table_name}");
     if ($deleted === false) {
-        return new WP_Error(
-            'truncate_failed',
-            'Could not clear schedule table: ' .
-            $wpdb->last_error
-        );
+        return new WP_Error('truncate_failed', 'Could not clear schedule table: ' . $wpdb->last_error);
     }
 
     $inserted = 0;
 
     foreach ($rows as $row) {
-
         $result = $wpdb->insert(
             $table_name,
             array(
-                'po_number'   => isset($row['P.O.'])
-                    ? $row['P.O.']
-                    : '',
-
-                'order_date'  => isset($row['DATE'])
-                    ? $row['DATE']
-                    : '',
-
-                'customer'    => isset($row['CUSTOMER'])
-                    ? $row['CUSTOMER']
-                    : '',
-
-                'due_date'    => isset($row['DUE'])
-                    ? $row['DUE']
-                    : '',
-
-                'part_number' => isset($row['PART NUMBER'])
-                    ? $row['PART NUMBER']
-                    : '',
-
-                'qty'         => isset($row['QTY'])
-                    ? $row['QTY']
-                    : '',
-
-                'open_qty'    => isset($row['OPEN'])
-                    ? $row['OPEN']
-                    : '',
-
-                'open_raw'    => isset($row['OPEN_RAW'])
-                    ? absint($row['OPEN_RAW'])
-                    : 0,
-
-                'status'      => isset($row['STATUS'])
-                    ? $row['STATUS']
-                    : '',
-
-                'notes'       => isset($row['NOTES'])
-                    ? $row['NOTES']
-                    : '',
-
-                'synced_at'   => current_time('mysql'),
+                'po_number'   => isset($row['P.O.']) ? $row['P.O.'] : '',
+                'order_date'  => isset($row['DATE']) ? $row['DATE'] : '',
+                'customer'    => isset($row['CUSTOMER']) ? $row['CUSTOMER'] : '',
+                'due_date'    => isset($row['DUE']) ? $row['DUE'] : '',
+                'part_number' => isset($row['PART NUMBER']) ? $row['PART NUMBER'] : '',
+                'qty'         => isset($row['QTY']) ? $row['QTY'] : '',
+                'open_qty'    => isset($row['OPEN']) ? $row['OPEN'] : '',
+                'open_raw'    => isset($row['OPEN_RAW']) ? absint($row['OPEN_RAW']) : 0,
+                'status'      => isset($row['STATUS']) ? $row['STATUS'] : '',
+                'notes'       => isset($row['NOTES']) ? $row['NOTES'] : '',
+                'synced_at'   => $now,
             )
         );
 
         if ($result === false) {
-            return new WP_Error(
-                'insert_failed',
-                'Database insert failed: ' .
-                $wpdb->last_error
-            );
+            return new WP_Error('insert_failed', 'Database insert failed: ' . $wpdb->last_error);
         }
 
         $inserted++;
     }
+
+    update_option('tlk_schedule_last_successful_sync', $now, false);
+    update_option('tlk_schedule_last_sync_row_count', $inserted, false);
 
     return $inserted;
 }
@@ -1179,8 +1227,9 @@ function tlk_get_on_time_delivery($year, $month) {
  * https://your-site.com/?tlk_schedule_cron=YOUR_SECRET_KEY
  * 
  * In Hostinger hPanel, go to site's Advanced Cron Jobs area.
- * Minute: 0 | Hour: 6 | Day, Month, Weekday blank
- * 0 6 * * *
+ * Recommended: run hourly.
+ * Minute: 0 | Hour: * | Day: * | Month: * | Weekday: *
+ * 0 * * * *
  * curl -fsS "https://YOUR-DOMAIN.com/?tlk_schedule_cron=YOUR_SECRET_KEY" >/dev/null 2>&1
  */
 function tlk_handle_server_cron_sync() {
