@@ -26,6 +26,12 @@ $current_month = (int) wp_date('n');
 
 $on_time = tlk_get_on_time_delivery($current_year, $current_month);
 
+$current_period = wp_date('F Y', mktime(0, 0, 0, $current_month, 1, $current_year));
+$production_target = 60;
+$cnc_percent = min(100, (int) round(($cnc_quota['total'] / $production_target) * 100));
+$pouring_percent = min(100, (int) round(($pouring_quota['total'] / $production_target) * 100));
+$building_percent = min(100, (int) round(($building_quota['total'] / $production_target) * 100));
+
 /* Employee select */
 $select_employee = tlk_select_employee();
 
@@ -81,9 +87,7 @@ $edit_redirect = get_permalink();
                                 </option>
                             <?php endforeach; ?>
                             <?php if ($can_add_employee): ?>
-                                <?php if ($can_add_employee): ?>
                             <option value="__new__">+ Add new employee</option>
-                        <?php endif; ?>
                             <?php endif; ?>
                         </select>
                         <input
@@ -298,237 +302,139 @@ $edit_redirect = get_permalink();
 
     <?php } ?>
 
-    <div class="dash-container__header">
-        <div>
-            <h1>Production Statistics by Department</h1>
-        </div>
-        <div class="dash-container__overview">
-            <div class="dashboard-card <?php echo $cnc_quota['met'] ? 'js-goodquota' : 'js-badquota'; ?>">
-                <?php
-                echo $cnc_quota['met']
-                    ? 'CNC: Good job '
-                    : 'CNC: Did not meet quota ';
-                ?>
-                <p>Total parts this month: <?php echo $cnc_quota['total']; ?></p>
-            </div>
-            <div class="dashboard-card <?php echo $pouring_quota['met'] ? 'js-goodquota' : 'js-badquota'; ?>">
-                <?php
-                echo $pouring_quota['met']
-                    ? 'Pouring: Good job '
-                    : 'Pouring: Did not meet quota ';
-                ?>
-                <p>Total parts this month: <?php echo $pouring_quota['total']; ?></p>
-            </div>
-            <div class="dashboard-card <?php echo $building_quota['met'] ? 'js-goodquota' : 'js-badquota'; ?>">
-                <p>
-                    <?php
-                    echo $building_quota['met']
-                        ? 'Building: Good job '
-                        : 'Building: Did not meet quota ';
-                    ?>
-                    <p>Total parts this month: <?php echo $building_quota['total']; ?></p>
-                </p>
-            </div>
-        </div>
-    </div>
+    <section class="tlk-stats-section">
+        <h1 class="tlk-stats-title">
+            Production Statistics by Department
+            <span>(<?php echo esc_html($current_period); ?>)</span>
+        </h1>
 
-    <div class="dash-container__header">
-        <div>
-            <h1>Order Statistics</h1>
-            <p>
-                <?php
-                echo esc_html(
-                    wp_date(
-                        'F Y',
-                        mktime(0, 0, 0, $current_month, 1, $current_year)
-                    )
-                );
-                ?>
-            </p>
-        </div>
-    </div>
+        <div class="tlk-production-grid">
+            <?php
+            $departments = array(
+                array('name' => 'CNC', 'quota' => $cnc_quota, 'percent' => $cnc_percent),
+                array('name' => 'Pouring', 'quota' => $pouring_quota, 'percent' => $pouring_percent),
+                array('name' => 'Building', 'quota' => $building_quota, 'percent' => $building_percent),
+            );
+            ?>
 
-    <div class="dash-container__overview">
-        <div class="dashboard-card">
-            <p>Open Quantity for Orders: </p>&nbsp;
-            <strong>
-                <?php echo esc_html(number_format_i18n($total_open)); ?>
-            </strong>
-        </div>
-
-        <div class="dashboard-card">
-            <p>Past Due Quantity for Orders: </p>&nbsp;
-            <strong>
-                <?php echo esc_html(number_format_i18n($past_due)); ?>
-            </strong>
-        </div>
-
-        <div class="dashboard-card">
-            <p>On-Time Delivery:</p>&nbsp;
-
-            <strong>
-                <?php if ($on_time['percent'] === null) : ?>
-
-                    N/A
-
-                <?php else : ?>
-
-                    <?php
-                    echo esc_html(
-                        number_format_i18n(
-                            $on_time['percent'],
-                            1
-                        )
-                    );
-                    ?>%
-
-                <?php endif; ?>
-            </strong>
-
-            <?php if ($on_time['total'] > 0) : ?>
-                <small>
-                    <?php echo esc_html($on_time['on_time']); ?>
-                    of
-                    <?php echo esc_html($on_time['total']); ?>
-                    orders
-                </small>
-
-                <details class="dashboard-card__details">
-                    <summary>View calculation details</summary>
-
-                    <div class="dashboard-card__details-content">
-
-                        <p>
-                            <strong>Current period:</strong>
-                            <?php
-                            echo esc_html(
-                                wp_date(
-                                    'F Y',
-                                    mktime(
-                                        0,
-                                        0,
-                                        0,
-                                        $current_month,
-                                        1,
-                                        $current_year
-                                    )
-                                )
-                            );
-                            ?>
-                        </p>
-
-                        <p>
-                            <strong>Total shipped orders:</strong>
-                            <?php echo esc_html($on_time['total']); ?>
-                        </p>
-
-                        <p>
-                            <strong>On-time orders:</strong>
-                            <?php echo esc_html($on_time['on_time']); ?>
-                        </p>
-
-                        <p>
-                            <strong>Late orders:</strong>
-                            <?php
-                            echo esc_html(
-                                $on_time['total'] - $on_time['on_time']
-                            );
-                            ?>
-                        </p>
-
-                        <p>
-                            <strong>On-time delivery rate:</strong> (Number of On-Time Deliveries / Total Number of Deliveries) × 100
-                            <strong>Calculation:</strong>
-                            <?php echo esc_html($on_time['on_time']); ?>
-                            ÷
-                            <?php echo esc_html($on_time['total']); ?>
-                            × 100
-                            =
-                            <?php
-                            echo esc_html(
-                                number_format_i18n(
-                                    $on_time['percent'],
-                                    1
-                                )
-                            );
-                            ?>%
-                        </p>
-
-                        <p class="dashboard-card__details-note">
-                            Based on orders recorded in the order history table
-                            with a shipped date in the current month.
-                        </p>
-                        <?php if (!empty($on_time['orders'])) : ?>
-
-                        <div class="dashboard-card__order-list">
-
-                            <strong>Orders included:</strong>
-
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>PO</th>
-                                        <th>Due</th>
-                                        <th>Shipped</th>
-                                        <th>Status</th>
-                                    </tr>
-                                </thead>
-
-                                <tbody>
-
-                                    <?php foreach ($on_time['orders'] as $order) : ?>
-
-                                        <tr>
-                                            <td>
-                                                <?php echo esc_html($order['po_number']); ?>
-                                            </td>
-
-                                            <td>
-                                                <?php
-                                                echo esc_html(
-                                                    wp_date(
-                                                        'M j, Y',
-                                                        strtotime($order['due_date'])
-                                                    )
-                                                );
-                                                ?>
-                                            </td>
-
-                                            <td>
-                                                <?php
-                                                echo esc_html(
-                                                    wp_date(
-                                                        'M j, Y',
-                                                        strtotime($order['shipped_date'])
-                                                    )
-                                                );
-                                                ?>
-                                            </td>
-
-                                            <td>
-                                                <?php if ((int) $order['on_time'] === 1) : ?>
-                                                    On Time
-                                                <?php else : ?>
-                                                    Late
-                                                <?php endif; ?>
-                                            </td>
-                                        </tr>
-
-                                    <?php endforeach; ?>
-
-                                </tbody>
-                            </table>
-
-                        </div>
-
-                    <?php endif; ?>
-
+            <?php foreach ($departments as $department) : ?>
+                <div class="tlk-production-card <?php echo $department['quota']['met'] ? 'is-good' : 'is-bad'; ?>">
+                    <div class="tlk-production-card__top">
+                        <h2><?php echo esc_html($department['name']); ?></h2>
+                        <span class="tlk-status-icon" aria-hidden="true">
+                            <?php echo $department['quota']['met'] ? '&#10003;' : '&#8595;'; ?>
+                        </span>
                     </div>
-                </details>
 
-            <?php endif; ?>
+                    <div class="tlk-production-card__number">
+                        <?php echo esc_html(number_format_i18n($department['quota']['total'])); ?>
+                    </div>
+
+                    <div class="tlk-production-card__bottom">
+                        <div class="tlk-production-card__progress-info">
+                            <strong>
+                                <?php echo esc_html(number_format_i18n($department['quota']['total'])); ?> /
+                                <?php echo esc_html(number_format_i18n($production_target)); ?>
+                            </strong>
+                            <strong><?php echo esc_html($department['percent']); ?>%</strong>
+                        </div>
+                        <div class="tlk-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<?php echo esc_attr($department['percent']); ?>">
+                            <span style="width: <?php echo esc_attr($department['percent']); ?>%;"></span>
+                        </div>
+                    </div>
+                </div>
+            <?php endforeach; ?>
         </div>
-    </div>
+    </section>
+
+    <section class="tlk-stats-section tlk-order-section">
+        <h1 class="tlk-stats-title">Order Statistics <?php echo esc_html($current_period); ?></h1>
+
+        <div class="tlk-order-grid">
+            <div class="tlk-order-card tlk-order-card--good">
+                <h2>Open Quantity for<br>Orders:</h2>
+                <div class="tlk-order-card__number">
+                    <?php echo esc_html(number_format_i18n($total_open)); ?>
+                </div>
+            </div>
+
+            <div class="tlk-order-card tlk-order-card--bad">
+                <h2>Past Due Quantity<br>for Orders:</h2>
+                <div class="tlk-order-card__number">
+                    <?php echo esc_html(number_format_i18n($past_due)); ?>
+                </div>
+            </div>
+
+            <?php
+            // Change the On-Time Delivery card color based on the current ratio.
+            if ($on_time['percent'] === null) {
+                $on_time_status_class = 'tlk-order-card--neutral';
+            } elseif ($on_time['percent'] >= 90) {
+                $on_time_status_class = 'tlk-order-card--good';
+            } elseif ($on_time['percent'] >= 75) {
+                $on_time_status_class = 'tlk-order-card--warning';
+            } else {
+                $on_time_status_class = 'tlk-order-card--bad';
+            }
+            ?>
+
+            <div class="tlk-order-card <?php echo esc_attr($on_time_status_class); ?>">
+                <h2>On-Time Delivery:</h2>
+                <div class="tlk-order-card__number">
+                    <?php if ($on_time['percent'] === null) : ?>
+                        N/A
+                    <?php else : ?>
+                        <?php echo esc_html(number_format_i18n($on_time['percent'], 1)); ?>%
+                    <?php endif; ?>
+                </div>
+
+                <?php if ($on_time['total'] > 0) : ?>
+                    <div class="tlk-order-card__ratio">
+                        <?php echo esc_html($on_time['on_time']); ?> of <?php echo esc_html($on_time['total']); ?> orders
+                    </div>
+
+                    <details class="tlk-order-details">
+                        <summary>
+                            <span class="tlk-details-view">View Calculation</span>
+                            <span class="tlk-details-hide">Hide Calculation</span>
+                        </summary>
+                        <div class="tlk-order-details__content">
+                            <p><strong>Current period:</strong> <?php echo esc_html($current_period); ?></p>
+                            <p><strong>Total shipped orders:</strong> <?php echo esc_html($on_time['total']); ?></p>
+                            <p><strong>On-time orders:</strong> <?php echo esc_html($on_time['on_time']); ?></p>
+                            <p><strong>Late orders:</strong> <?php echo esc_html($on_time['total'] - $on_time['on_time']); ?></p>
+                            <p>
+                                <strong>Calculation:</strong>
+                                <?php echo esc_html($on_time['on_time']); ?> &divide; <?php echo esc_html($on_time['total']); ?> &times; 100 =
+                                <?php echo esc_html(number_format_i18n($on_time['percent'], 1)); ?>%
+                            </p>
+
+                            <?php if (!empty($on_time['orders'])) : ?>
+                                <div class="dashboard-card__order-list">
+                                    <strong>Orders included:</strong>
+                                    <div class="table-container">
+                                        <table>
+                                            <thead><tr><th>PO</th><th>Due</th><th>Shipped</th><th>Status</th></tr></thead>
+                                            <tbody>
+                                                <?php foreach ($on_time['orders'] as $order) : ?>
+                                                    <tr>
+                                                        <td><?php echo esc_html($order['po_number']); ?></td>
+                                                        <td><?php echo esc_html(wp_date('M j, Y', strtotime($order['due_date']))); ?></td>
+                                                        <td><?php echo esc_html(wp_date('M j, Y', strtotime($order['shipped_date']))); ?></td>
+                                                        <td><?php echo (int) $order['on_time'] === 1 ? 'On Time' : 'Late'; ?></td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </details>
+                <?php endif; ?>
+            </div>
+        </div>
+    </section>
 </main>
 
 <?php get_footer(); ?>

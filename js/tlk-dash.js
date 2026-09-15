@@ -1,6 +1,4 @@
 jQuery(document).ready(function ($) {
-    var summaryTitle = $('.dashboard-card__details');
-
     function updateRemoveButtons() {
         var rows = $('#production-entry-list .production-entry-row');
         rows.find('.production-remove-row').prop('disabled', rows.length === 1);
@@ -45,12 +43,4 @@ jQuery(document).ready(function ($) {
     });
 
     updateRemoveButtons();
-
-    summaryTitle.on('toggle', function () {
-        if (this.open) {
-            $(this).addClass('active-summary');
-        } else {
-            $(this).removeClass('active-summary');
-        }
-    });
 });
