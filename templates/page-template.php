@@ -47,6 +47,8 @@ $edit_redirect = get_permalink();
         'deric@tlkprecision.com',
     );
 
+    $can_add_employee = (strtolower((string) $current_user->user_email) === 'connor@flexrockperformance.com');
+
     if (in_array($current_user->user_email, $allowed_emails, true)) { ?>
 
     <div class="dash-container__form">
@@ -78,7 +80,11 @@ $edit_redirect = get_permalink();
                                     <?php echo esc_html($employee); ?>
                                 </option>
                             <?php endforeach; ?>
+                            <?php if ($can_add_employee): ?>
+                                <?php if ($can_add_employee): ?>
                             <option value="__new__">+ Add new employee</option>
+                        <?php endif; ?>
+                            <?php endif; ?>
                         </select>
                         <input
                             type="text"
@@ -113,7 +119,9 @@ $edit_redirect = get_permalink();
                                 <?php echo esc_html($employee); ?>
                             </option>
                         <?php endforeach; ?>
-                        <option value="__new__">+ Add new employee</option>
+                        <?php if ($can_add_employee): ?>
+                            <option value="__new__">+ Add new employee</option>
+                        <?php endif; ?>
                     </select>
                     <input
                         type="text"
