@@ -58,7 +58,7 @@ On each successful sync:
 2. The latest Google rows are inserted.
 3. The dashboard reads only from this table.
 
-Also, production team leads store how many parts are produced in `tlk_production`.
+Also, production team leads store how many parts are produced in `tlk_production`, `wp_tlk_order_history`, and `wp_tlk_seen_orders`.
 
 ## Usage (Spreadsheet Side)
 
