@@ -1568,92 +1568,58 @@ add_filter(
     3
 );
 
-/* Check if CNC has made at least 60 parts this month */
-function cnc_quota(){
+/**
+ * Get the average monthly production per employee for a department.
+ *
+ * Each employee's entries for the current month are totaled first.
+ * Those employee totals are then averaged together.
+ */
+function tlk_department_quota($department) {
     global $wpdb;
 
     $target_num = 60;
-
     $table_name = $wpdb->prefix . 'tlk_production';
 
     $current_year  = (int) wp_date('Y');
     $current_month = (int) wp_date('n');
 
-    $result = $wpdb->get_var(
+    $employee_totals = $wpdb->get_col(
         $wpdb->prepare(
-            "SELECT COALESCE(SUM(qty), 0)
+            "SELECT SUM(qty) AS employee_total
              FROM {$table_name}
              WHERE department = %s
                AND YEAR(entry_date) = %d
-               AND MONTH(entry_date) = %d",
-            'CNC',
+               AND MONTH(entry_date) = %d
+             GROUP BY employee",
+            $department,
             $current_year,
             $current_month
         )
     );
 
+    if (empty($employee_totals)) {
+        $average = 0;
+    } else {
+        $average = array_sum(array_map('intval', $employee_totals)) / count($employee_totals);
+    }
+
     return array(
-        'total' => (int) $result,
-        'met'   => (int) $result >= $target_num,
+        'total' => $average,
+        'met'   => $average >= $target_num,
     );
 }
 
-/* Check if Pouring has made at least 60 parts this month */
+/* CNC average production per employee this month */
+function cnc_quota() {
+    return tlk_department_quota('CNC');
+}
+
+/* Pouring average production per employee this month */
 function pouring_quota() {
-    global $wpdb;
-
-    $target_num = 60;
-
-    $table_name = $wpdb->prefix . 'tlk_production';
-
-    $current_year  = (int) wp_date('Y');
-    $current_month = (int) wp_date('n');
-
-    $result = $wpdb->get_var(
-        $wpdb->prepare(
-            "SELECT COALESCE(SUM(qty), 0)
-             FROM {$table_name}
-             WHERE department = %s
-               AND YEAR(entry_date) = %d
-               AND MONTH(entry_date) = %d",
-            'Pouring',
-            $current_year,
-            $current_month
-        )
-    );
-
-    return array(
-        'total' => (int) $result,
-        'met'   => (int) $result >= $target_num,
-    );
+    return tlk_department_quota('Pouring');
 }
 
-/* Check if Buiding has made at least 60 parts this month */
+/* Building average production per employee this month */
 function building_quota() {
-    global $wpdb;
-
-    $target_num = 60;
-
-    $table_name = $wpdb->prefix . 'tlk_production';
-
-    $current_year  = (int) wp_date('Y');
-    $current_month = (int) wp_date('n');
-
-    $result = $wpdb->get_var(
-        $wpdb->prepare(
-            "SELECT COALESCE(SUM(qty), 0)
-             FROM {$table_name}
-             WHERE department = %s
-               AND YEAR(entry_date) = %d
-               AND MONTH(entry_date) = %d",
-            'Building',
-            $current_year,
-            $current_month
-        )
-    );
-
-    return array(
-        'total' => (int) $result,
-        'met'   => (int) $result >= $target_num,
-    );
+    return tlk_department_quota('Building');
 }
