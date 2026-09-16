@@ -326,7 +326,17 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
             ?>
 
             <?php foreach ($departments as $department) : ?>
-                <div class="tlk-production-card <?php echo $department['quota']['met'] ? 'is-good' : 'is-bad'; ?>">
+                <?php
+                if ($department['quota']['met']) {
+                    $production_status_class = 'is-good';
+                } elseif ($department['percent'] >= 50) {
+                    $production_status_class = 'is-warning';
+                } else {
+                    $production_status_class = 'is-bad';
+                }
+                ?>
+
+                <div class="tlk-production-card <?php echo esc_attr($production_status_class); ?>">
                     <div class="tlk-production-card__top">
                         <h2><?php echo esc_html($department['name']); ?></h2>
                         <span class="tlk-status-icon" aria-hidden="true">
@@ -379,7 +389,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                 $on_time_status_class = 'tlk-order-card--neutral';
             } elseif ($on_time['percent'] >= 90) {
                 $on_time_status_class = 'tlk-order-card--good';
-            } elseif ($on_time['percent'] >= 75) {
+            } elseif ($on_time['percent'] >= 50) {
                 $on_time_status_class = 'tlk-order-card--warning';
             } else {
                 $on_time_status_class = 'tlk-order-card--bad';
