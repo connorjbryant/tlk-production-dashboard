@@ -363,7 +363,7 @@
 .tlk-stats-section {
   width: 100%;
   background-color: rgba(255, 255, 255, 0.74);
-  padding: 16px 26px 16px;
+  padding: 16px 26px 8px;
 }
 
 .tlk-stats-title {
