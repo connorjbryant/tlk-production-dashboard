@@ -23,7 +23,7 @@ Google Sheets is the source of truth. You upload a QuickBooks CSV, Apps Script b
 7. WordPress `get_schedule_data()` retrieves the JSON
 8. `tlk_sync_schedule_to_database()` saves the data to WordPress
 9. Data is stored in **`wp_tlk_schedule`**
-10. Other data is stored in **`tlk_production`**
+10. Other data is stored in **`tlk_production`** , **`wp_tlk_order_history`**, and **`wp_tlk_seen_orders`**
 
 In short: Visit the dashboard and WordPress contacts Google. Then the WordPress table is rebuilt and the plugin displays the table.
 
@@ -58,7 +58,7 @@ On each successful sync:
 2. The latest Google rows are inserted.
 3. The dashboard reads only from this table.
 
-Also, production team leads store how many parts are produced in `tlk_production`, `wp_tlk_order_history`, and `wp_tlk_seen_orders`.
+Also, production team leads store how many parts are produced in `tlk_production`.
 
 ## Usage (Spreadsheet Side)
 
