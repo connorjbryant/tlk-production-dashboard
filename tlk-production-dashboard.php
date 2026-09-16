@@ -691,6 +691,222 @@ add_action(
 );
 
 /**
+ * Email address used for TLK schedule sync notifications.
+ */
+function tlk_schedule_notification_email() {
+    return 'connor@flexrockperformance.com';
+}
+
+/**
+ * Normalize a schedule row so saved database rows and fresh Google rows
+ * can be compared consistently.
+ */
+function tlk_schedule_notification_normalize_row($row, $source = 'database') {
+    if ($source === 'google') {
+        return array(
+            'po_number'   => trim((string) ($row['P.O.'] ?? '')),
+            'order_date'  => trim((string) ($row['DATE'] ?? '')),
+            'customer'    => trim((string) ($row['CUSTOMER'] ?? '')),
+            'due_date'    => trim((string) ($row['DUE'] ?? '')),
+            'part_number' => trim((string) ($row['PART NUMBER'] ?? '')),
+            'qty'         => trim((string) ($row['QTY'] ?? '')),
+            'open_qty'    => trim((string) ($row['OPEN'] ?? '')),
+            'status'      => trim((string) ($row['STATUS'] ?? '')),
+            'notes'       => trim((string) ($row['NOTES'] ?? '')),
+        );
+    }
+
+    return array(
+        'po_number'   => trim((string) ($row['po_number'] ?? '')),
+        'order_date'  => trim((string) ($row['order_date'] ?? '')),
+        'customer'    => trim((string) ($row['customer'] ?? '')),
+        'due_date'    => trim((string) ($row['due_date'] ?? '')),
+        'part_number' => trim((string) ($row['part_number'] ?? '')),
+        'qty'         => trim((string) ($row['qty'] ?? '')),
+        'open_qty'    => trim((string) ($row['open_qty'] ?? '')),
+        'status'      => trim((string) ($row['status'] ?? '')),
+        'notes'       => trim((string) ($row['notes'] ?? '')),
+    );
+}
+
+/**
+ * Group schedule rows by PO and create a stable signature for comparison.
+ */
+function tlk_schedule_notification_group_rows($rows, $source = 'database') {
+    $grouped = array();
+
+    foreach ((array) $rows as $row) {
+        $normalized = tlk_schedule_notification_normalize_row($row, $source);
+        $po = $normalized['po_number'];
+
+        if ($po === '') {
+            continue;
+        }
+
+        if (!isset($grouped[$po])) {
+            $grouped[$po] = array();
+        }
+
+        $grouped[$po][] = $normalized;
+    }
+
+    foreach ($grouped as $po => &$po_rows) {
+        usort($po_rows, function ($a, $b) {
+            return strcmp(wp_json_encode($a), wp_json_encode($b));
+        });
+    }
+    unset($po_rows);
+
+    ksort($grouped, SORT_NATURAL);
+
+    return $grouped;
+}
+
+/**
+ * Compare the previous saved schedule with the fresh Google schedule.
+ */
+function tlk_schedule_notification_get_changes($old_rows, $new_rows) {
+    $old = tlk_schedule_notification_group_rows($old_rows, 'database');
+    $new = tlk_schedule_notification_group_rows($new_rows, 'google');
+
+    $changes = array(
+        'added'   => array(),
+        'removed' => array(),
+        'changed' => array(),
+    );
+
+    foreach ($new as $po => $rows) {
+        if (!isset($old[$po])) {
+            $changes['added'][$po] = $rows;
+            continue;
+        }
+
+        if (wp_json_encode($old[$po]) !== wp_json_encode($rows)) {
+            $changes['changed'][$po] = array(
+                'old' => $old[$po],
+                'new' => $rows,
+            );
+        }
+    }
+
+    foreach ($old as $po => $rows) {
+        if (!isset($new[$po])) {
+            $changes['removed'][$po] = $rows;
+        }
+    }
+
+    return $changes;
+}
+
+/**
+ * Format all rows for one PO into concise email text.
+ */
+function tlk_schedule_notification_format_po_rows($rows) {
+    $lines = array();
+
+    foreach ((array) $rows as $row) {
+        $parts = array();
+
+        if ($row['customer'] !== '') {
+            $parts[] = 'Customer: ' . $row['customer'];
+        }
+        if ($row['part_number'] !== '') {
+            $parts[] = 'Part: ' . $row['part_number'];
+        }
+        if ($row['qty'] !== '') {
+            $parts[] = 'Qty: ' . $row['qty'];
+        }
+        if ($row['open_qty'] !== '') {
+            $parts[] = 'Open: ' . $row['open_qty'];
+        }
+        if ($row['due_date'] !== '') {
+            $parts[] = 'Due: ' . $row['due_date'];
+        }
+        if ($row['status'] !== '') {
+            $parts[] = 'Status: ' . $row['status'];
+        }
+        if ($row['notes'] !== '') {
+            $parts[] = 'Notes: ' . $row['notes'];
+        }
+
+        $lines[] = '  - ' . implode(' | ', $parts);
+    }
+
+    return implode("\n", $lines);
+}
+
+/**
+ * Send an email only when the schedule itself changed.
+ */
+function tlk_send_schedule_change_email($changes, $sync_time) {
+    $added_count   = count($changes['added']);
+    $removed_count = count($changes['removed']);
+    $changed_count = count($changes['changed']);
+
+    if (($added_count + $removed_count + $changed_count) === 0) {
+        return;
+    }
+
+    $subject = sprintf(
+        'TLK Schedule Changes Detected - %d Added, %d Removed, %d Changed',
+        $added_count,
+        $removed_count,
+        $changed_count
+    );
+
+    $message = "TLK schedule changes were detected during the sync at {$sync_time}.\n\n";
+
+    if ($added_count > 0) {
+        $message .= "NEW PO(S)\n";
+        $message .= "---------\n";
+        foreach ($changes['added'] as $po => $rows) {
+            $message .= "PO {$po}\n";
+            $message .= tlk_schedule_notification_format_po_rows($rows) . "\n\n";
+        }
+    }
+
+    if ($removed_count > 0) {
+        $message .= "REMOVED / NO LONGER ON SCHEDULE\n";
+        $message .= "-------------------------------\n";
+        foreach ($changes['removed'] as $po => $rows) {
+            $message .= "PO {$po}\n";
+            $message .= tlk_schedule_notification_format_po_rows($rows) . "\n\n";
+        }
+    }
+
+    if ($changed_count > 0) {
+        $message .= "CHANGED PO(S)\n";
+        $message .= "-------------\n";
+        foreach ($changes['changed'] as $po => $change) {
+            $message .= "PO {$po}\n";
+            $message .= "Before:\n";
+            $message .= tlk_schedule_notification_format_po_rows($change['old']) . "\n";
+            $message .= "After:\n";
+            $message .= tlk_schedule_notification_format_po_rows($change['new']) . "\n\n";
+        }
+    }
+
+    wp_mail(tlk_schedule_notification_email(), $subject, $message);
+}
+
+/**
+ * Send a confirmation after every successful schedule sync.
+ */
+function tlk_send_schedule_sync_success_email($inserted, $changes, $sync_time) {
+    $change_total = count($changes['added']) + count($changes['removed']) + count($changes['changed']);
+
+    $subject = 'TLK Schedule Successfully Synced';
+    $message = "The TLK schedule successfully synced at {$sync_time}.\n\n";
+    $message .= 'Rows synced: ' . absint($inserted) . "\n";
+    $message .= 'New POs: ' . count($changes['added']) . "\n";
+    $message .= 'Removed POs: ' . count($changes['removed']) . "\n";
+    $message .= 'Changed POs: ' . count($changes['changed']) . "\n";
+    $message .= 'Schedule changes detected: ' . ($change_total > 0 ? 'Yes' : 'No') . "\n";
+
+    wp_mail(tlk_schedule_notification_email(), $subject, $message);
+}
+
+/**
  * Sync Google spreadsheet to WordPress.
  */
 function tlk_sync_schedule_to_database() {
@@ -717,6 +933,18 @@ function tlk_sync_schedule_to_database() {
     if (empty($rows) || !is_array($rows)) {
         return new WP_Error('no_google_data', 'No schedule data was returned from Google.');
     }
+
+    // Capture the current saved snapshot before it is replaced so we can
+    // report exactly which POs were added, removed, or changed.
+    $previous_schedule_rows = $wpdb->get_results(
+        "SELECT po_number, order_date, customer, due_date, part_number, qty, open_qty, status, notes FROM {$table_name} ORDER BY id ASC",
+        ARRAY_A
+    );
+
+    // Avoid treating the very first sync on an empty installation as a giant change.
+    $schedule_changes = !empty($previous_schedule_rows)
+        ? tlk_schedule_notification_get_changes($previous_schedule_rows, $rows)
+        : array('added' => array(), 'removed' => array(), 'changed' => array());
 
     // Build one current record per PO from the fresh Google schedule.
     $current_orders = array();
@@ -898,6 +1126,11 @@ function tlk_sync_schedule_to_database() {
 
     update_option('tlk_schedule_last_successful_sync', $now, false);
     update_option('tlk_schedule_last_sync_row_count', $inserted, false);
+
+    // A change email is sent only when the schedule differs from the previous
+    // saved snapshot. A success email is sent after every completed sync.
+    tlk_send_schedule_change_email($schedule_changes, $now);
+    tlk_send_schedule_sync_success_email($inserted, $schedule_changes, $now);
 
     return $inserted;
 }
