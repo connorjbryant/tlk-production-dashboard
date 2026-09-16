@@ -43,4 +43,12 @@ jQuery(document).ready(function ($) {
     });
 
     updateRemoveButtons();
+
+    // Development helper for testing monthly backgrounds.
+    window.testMonth = function (month) {
+        $('.dash-container').css(
+            'background-image',
+            `url("/wp-content/plugins/tlk-production-dashboard/images/${month}.jpg")`
+        );
+    };
 });

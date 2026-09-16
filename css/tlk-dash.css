@@ -3,12 +3,27 @@
     display: none;
 }
 
+.tlk-prod-dash .site-header .clearfix {
+    display: none;
+}
+
+.tlk-prod-dash .site-content {
+    padding-top: 0px !important;
+}
+
+.tlk-prod-dash .footer-widgets, .tlk-prod-dash footer {
+    display: none;
+}
+
+.tlk-prod-dash .site-content {
+    padding-bottom: 0 !important;
+}
+
 /* Main dashboard */
 .dash-container {
     width: 100%;
     max-width: 1200px;
     margin: 0 auto;
-    padding: 2rem 1rem;
 }
 
 /* Shared panel shell — form, recent entries, and stats use the same language */
@@ -19,7 +34,6 @@
     padding: 28px 26px;
     background: #fff;
     border: 2px solid #8f918e;
-    border-radius: 20px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
 }
 
@@ -344,23 +358,24 @@
 }
 
 /* =========================================================
-   Screenshot-style production and order statistics
+   Production and order statistics
    ========================================================= */
 .tlk-stats-section {
     width: 100%;
-    margin: 0 0 4rem;
+    background-color: rgba(255, 255, 255, 0.74);
+    padding: 16px 26px 16px;
 }
 
 .tlk-stats-title {
     margin: 0 0 2rem !important;
-    font-size: clamp(36px, 4.2vw, 54px);
+    font-size: 34px;
     line-height: 1.12;
     font-weight: 700;
     color: #000;
 }
 
 .tlk-stats-title span {
-    display: block;
+    /* display: block; */
     margin: 0 !important;
     background: transparent !important;
     font: inherit;
@@ -385,7 +400,7 @@
 .tlk-production-card {
     display: flex;
     flex-direction: column;
-    min-height: 320px;
+    /* min-height: 320px; */
     padding: 28px 26px 30px;
     border: 2px solid #8f918e;
 }
@@ -438,7 +453,7 @@
 .is-bad .tlk-production-card__number,
 .is-bad .tlk-production-card__progress-info strong:last-child { color: #d32626; }
 
-.tlk-production-card__bottom { margin-top: auto; }
+/* .tlk-production-card__bottom { margin-top: auto; } */
 
 .tlk-production-card__progress-info {
     display: flex;
@@ -470,10 +485,8 @@
 .is-good .tlk-progress { color: #437b1b; }
 .is-bad .tlk-progress { color: #d32626; }
 
-.tlk-order-section { padding-top: 0.5rem; }
-
 .tlk-order-card {
-    min-height: 320px;
+    /* min-height: 320px; */
     padding: 28px 26px;
     border: 2px solid #8f918e;
 }

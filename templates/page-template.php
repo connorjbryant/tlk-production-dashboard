@@ -39,9 +39,17 @@ $select_employee = tlk_select_employee();
 $editable_entries = tlk_get_current_user_editable_entries();
 
 $edit_redirect = get_permalink();
+
+$currentMonth = (int) date('n');
+
+$selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.jpg';
+
 ?>
 
-<main class="dash-container">
+<main class="dash-container"
+    <?php if ($selectedBg) : ?>
+    style="background-image: url('<?php echo esc_url($selectedBg); ?>');">
+    <?php endif; ?>
     <?php
     $current_user = wp_get_current_user();
 
@@ -348,7 +356,7 @@ $edit_redirect = get_permalink();
     </section>
 
     <section class="tlk-stats-section tlk-order-section">
-        <h1 class="tlk-stats-title">Order Statistics <?php echo esc_html($current_period); ?></h1>
+        <h1 class="tlk-stats-title">Order Statistics (<?php echo esc_html($current_period); ?>)</h1>
 
         <div class="tlk-order-grid">
             <div class="tlk-order-card tlk-order-card--good">
