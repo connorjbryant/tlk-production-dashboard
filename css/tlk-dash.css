@@ -82,6 +82,10 @@
   font-weight: 600;
 }
 
+.dash-container label, .dash-container select {
+  color: black;
+}
+
 .dash-container select,
 .dash-container input:not([type="submit"]) {
   position: relative;
@@ -185,6 +189,7 @@
   padding: 0.9rem 0;
   cursor: pointer;
   list-style-position: inside;
+  color: black;
 }
 
 .recent-entry__main,
