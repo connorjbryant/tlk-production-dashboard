@@ -2,6 +2,16 @@
 /**
  * Template Name: Schedule Dashboard
  */
+
+if ( post_password_required() ) {
+    get_header();
+
+    echo get_the_password_form();
+
+    get_footer();
+    exit;
+}
+
 get_header();
 
 // Eventually remove this once the real hostinger cron is in place
