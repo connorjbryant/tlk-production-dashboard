@@ -1,4 +1,7 @@
 jQuery(document).ready(function ($) {
+    var $departmentSelect = $('#department');
+    var $departmentImage = $('#department-image');
+
     function updateRemoveButtons() {
         var rows = $('#production-entry-list .production-entry-row');
         rows.find('.production-remove-row').prop('disabled', rows.length === 1);
@@ -51,4 +54,35 @@ jQuery(document).ready(function ($) {
             `url("/wp-content/plugins/tlk-production-dashboard/images/${month}.jpg")`
         );
     };
+
+    if (!$departmentSelect.length || !$departmentImage.length) {
+        return;
+    }
+
+    var departmentImages = {
+        'CNC': 'cnc.jpg',
+        'Pouring': 'pouring.jpg',
+        'Building': 'building.jpg'
+    };
+
+    function updateDepartmentImage() {
+        var department = $departmentSelect.val();
+        var image = departmentImages[department];
+
+        if (!image) {
+            return;
+        }
+
+        var imageBase = $departmentImage.data('image-base');
+
+        $departmentImage
+            .attr('src', imageBase + image)
+            .attr('alt', department);
+    }
+
+    $departmentSelect.on('change', function () {
+        updateDepartmentImage();
+    });
+
+    updateDepartmentImage();
 });

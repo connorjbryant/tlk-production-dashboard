@@ -27,6 +27,34 @@
   margin: 0 auto;
 }
 
+.dash-container__department-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 25px;
+  align-items: stretch;
+  margin-bottom: 25px;
+}
+
+.dash-container__department-row .dash-container__bg {
+  width: 100%;
+  margin: 0;
+}
+
+.department-image {
+  width: 100%;
+  min-height: 180px;
+  max-height: 180px;
+  overflow: hidden;
+}
+
+.department-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 180px;
+  object-fit: cover;
+}
+
 /* Shared panel shell — form, recent entries, and stats use the same language */
 .dash-container__form,
 .dash-container__recent-entries {
@@ -86,7 +114,8 @@
   font-weight: 600;
 }
 
-.dash-container label, .dash-container select {
+.dash-container label,
+.dash-container select {
   color: black;
 }
 
@@ -100,6 +129,7 @@
   padding: 0 12px;
   border: 2px solid #8f918e;
   border-radius: 8px;
+  color: black;
 }
 
 /* Buttons */
@@ -258,6 +288,10 @@
 @media (max-width: 768px) {
   .dash-container {
     padding: 1rem;
+  }
+
+  .dash-container__department-row {
+    grid-template-columns: 1fr;
   }
 
   .dash-container__form,

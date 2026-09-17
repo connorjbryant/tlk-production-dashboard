@@ -84,13 +84,27 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
 
             <?php wp_nonce_field('tlk_production_entry', 'tlk_production_nonce'); ?>
 
-            <div class="dash-container__bg">
-                <label for="department">Department:</label>
-                <select name="department" id="department" required>
-                    <option value="CNC">CNC</option>
-                    <option value="Pouring">Pouring</option>
-                    <option value="Building">Building</option>
-                </select>
+            <div class="dash-container__department-row">
+
+                <div class="dash-container__bg">
+                    <label for="department">Department:</label>
+
+                    <select name="department" id="department" required>
+                        <option value="CNC">CNC</option>
+                        <option value="Pouring">Pouring</option>
+                        <option value="Building">Building</option>
+                    </select>
+                </div>
+
+                <div class="department-image">
+                    <img
+                        id="department-image"
+                        src="<?php echo esc_url(plugin_dir_url(dirname(__FILE__)) . 'images/cnc.jpg'); ?>"
+                        data-image-base="<?php echo esc_url(plugin_dir_url(dirname(__FILE__)) . 'images/'); ?>"
+                        alt="CNC"
+                    >
+                </div>
+
             </div>
 
             <div class="production-entry-list" id="production-entry-list">
