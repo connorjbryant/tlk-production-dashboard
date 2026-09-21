@@ -3,21 +3,19 @@
   display: none;
 }
 
-.tlk-prod-dash .site-header .clearfix {
+/* Production Dashboard - logged-out users only */
+body:not(.logged-in).tlk-prod-dash .site-header .clearfix {
   display: none;
 }
 
-.tlk-prod-dash .site-content {
-  padding-top: 0px !important;
-}
-
-.tlk-prod-dash .footer-widgets,
-.tlk-prod-dash footer {
-  display: none;
-}
-
-.tlk-prod-dash .site-content {
+body:not(.logged-in).tlk-prod-dash .site-content {
+  padding-top: 0 !important;
   padding-bottom: 0 !important;
+}
+
+body:not(.logged-in).tlk-prod-dash .footer-widgets,
+body:not(.logged-in).tlk-prod-dash footer {
+  display: none;
 }
 
 /* Main dashboard */
