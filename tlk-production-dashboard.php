@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 1.5.0
+ * Version: 1.6.0
  * Author: Connor Bryant
  * License: GPL-2.0+
  */
@@ -18,7 +18,7 @@ function tlk_dash_enqueue_assets(){
         'tlk_dash_styles',
         plugins_url('css/tlk-dash.css', __FILE__),
         array(),
-        '1.5.0',
+        '1.6.0',
         'all'
     );
 
@@ -27,7 +27,7 @@ function tlk_dash_enqueue_assets(){
         'tlk_dash_script',
         plugins_url('js/tlk-dash.js', __FILE__),
         array('jquery'),
-        '1.5.0',
+        '1.6.0',
         true
     );
 }
@@ -1622,4 +1622,170 @@ function pouring_quota() {
 /* Building average production per employee this month */
 function building_quota() {
     return tlk_department_quota('Building');
+}
+/**
+ * Individual employee production targets + private performance reporting.
+ * Targets are monthly and are used only to calculate department goal attainment.
+ */
+function tlk_create_employee_targets_table() {
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'tlk_employee_targets';
+    $charset_collate = $wpdb->get_charset_collate();
+    $sql = "CREATE TABLE {$table_name} (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        employee VARCHAR(100) NOT NULL,
+        department VARCHAR(50) NOT NULL,
+        monthly_target DECIMAL(10,2) NOT NULL DEFAULT 60,
+        updated_at DATETIME NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY employee_department (employee, department)
+    ) {$charset_collate};";
+    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    dbDelta($sql);
+}
+register_activation_hook(__FILE__, 'tlk_create_employee_targets_table');
+
+function tlk_maybe_upgrade_employee_targets_table() {
+    if (get_option('tlk_employee_targets_db_version') === '1.0.0') return;
+    tlk_create_employee_targets_table();
+    update_option('tlk_employee_targets_db_version', '1.0.0');
+}
+add_action('init', 'tlk_maybe_upgrade_employee_targets_table', 6);
+
+function tlk_can_manage_employee_performance() {
+    if (!is_user_logged_in()) return false;
+    $user = wp_get_current_user();
+    $allowed = array(
+        'connor@flexrockperformance.com',
+        'josh@tlkprecision.com',
+        'brian@tlkprecision.com',
+        'todd@tlkprecision.com',
+        'deric@tlkprecision.com',
+    );
+    return current_user_can('manage_options') || in_array(strtolower((string) $user->user_email), $allowed, true);
+}
+
+function tlk_get_employee_target($employee, $department, $default = 60) {
+    global $wpdb;
+    $table = $wpdb->prefix . 'tlk_employee_targets';
+    $target = $wpdb->get_var($wpdb->prepare(
+        "SELECT monthly_target FROM {$table} WHERE employee = %s AND department = %s LIMIT 1",
+        $employee, $department
+    ));
+    return $target !== null ? (float) $target : (float) $default;
+}
+
+function tlk_get_employee_performance($department, $year, $month) {
+    global $wpdb;
+    $production = $wpdb->prefix . 'tlk_production';
+    $rows = $wpdb->get_results($wpdb->prepare(
+        "SELECT employee, SUM(CAST(qty AS DECIMAL(10,2))) AS produced
+         FROM {$production}
+         WHERE department = %s AND YEAR(entry_date) = %d AND MONTH(entry_date) = %d
+           AND employee IS NOT NULL AND employee != ''
+         GROUP BY employee ORDER BY employee ASC",
+        $department, $year, $month
+    ), ARRAY_A);
+
+    foreach ($rows as &$row) {
+        $row['produced'] = (float) $row['produced'];
+        $row['target'] = tlk_get_employee_target($row['employee'], $department, 60);
+        $row['percent'] = $row['target'] > 0 ? ($row['produced'] / $row['target']) * 100 : 0;
+    }
+    unset($row);
+    return $rows;
+}
+
+function tlk_get_department_performance($department, $year = null, $month = null) {
+    $year = $year ?: (int) wp_date('Y');
+    $month = $month ?: (int) wp_date('n');
+    $rows = tlk_get_employee_performance($department, $year, $month);
+    if (!$rows) return array('average_parts' => 0, 'percent' => 0, 'met' => false, 'employee_count' => 0);
+
+    $produced = array_sum(array_column($rows, 'produced'));
+    $percent_sum = array_sum(array_column($rows, 'percent'));
+    $count = count($rows);
+    $percent = $percent_sum / $count;
+    return array(
+        'average_parts' => $produced / $count,
+        'percent' => $percent,
+        'met' => $percent >= 100,
+        'employee_count' => $count,
+    );
+}
+
+function tlk_employee_performance_menu() {
+    add_menu_page(
+        'Employee Performance', 'Employee Performance', 'read',
+        'tlk-employee-performance', 'tlk_render_employee_performance_page',
+        'dashicons-chart-bar', 26
+    );
+}
+add_action('admin_menu', 'tlk_employee_performance_menu');
+
+function tlk_save_employee_targets() {
+    if (!tlk_can_manage_employee_performance()) wp_die('You are not allowed to manage employee targets.');
+    check_admin_referer('tlk_save_employee_targets');
+    global $wpdb;
+    $table = $wpdb->prefix . 'tlk_employee_targets';
+    $targets = isset($_POST['targets']) ? (array) wp_unslash($_POST['targets']) : array();
+    foreach ($targets as $encoded => $value) {
+        $parts = explode('|', base64_decode($encoded), 2);
+        if (count($parts) !== 2) continue;
+        list($department, $employee) = $parts;
+        $target = max(0, (float) $value);
+        $wpdb->replace($table, array(
+            'employee' => sanitize_text_field($employee),
+            'department' => sanitize_text_field($department),
+            'monthly_target' => $target,
+            'updated_at' => current_time('mysql'),
+        ), array('%s','%s','%f','%s'));
+    }
+    wp_safe_redirect(add_query_arg(array('page'=>'tlk-employee-performance','targets_saved'=>'1'), admin_url('admin.php')));
+    exit;
+}
+add_action('admin_post_tlk_save_employee_targets', 'tlk_save_employee_targets');
+
+function tlk_render_employee_performance_page() {
+    if (!tlk_can_manage_employee_performance()) wp_die('You are not allowed to view employee performance.');
+    $year = isset($_GET['year']) ? max(2020, absint($_GET['year'])) : (int) wp_date('Y');
+    $month = isset($_GET['month']) ? min(12, max(1, absint($_GET['month']))) : (int) wp_date('n');
+    $departments = array('CNC','Pouring','Building');
+    ?>
+    <div class="wrap">
+        <h1>Employee Performance</h1>
+        <p>Private individual production detail. The public dashboard continues to show department-level results only.</p>
+        <?php if (isset($_GET['targets_saved'])) : ?><div class="notice notice-success is-dismissible"><p>Employee targets saved.</p></div><?php endif; ?>
+        <form method="get" style="margin:18px 0;display:flex;gap:8px;align-items:center;">
+            <input type="hidden" name="page" value="tlk-employee-performance">
+            <select name="month"><?php for ($m=1;$m<=12;$m++): ?><option value="<?php echo $m; ?>" <?php selected($month,$m); ?>><?php echo esc_html(wp_date('F', mktime(0,0,0,$m,1))); ?></option><?php endfor; ?></select>
+            <input type="number" name="year" value="<?php echo esc_attr($year); ?>" min="2020" max="2100">
+            <button class="button">View</button>
+        </form>
+        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+            <input type="hidden" name="action" value="tlk_save_employee_targets">
+            <?php wp_nonce_field('tlk_save_employee_targets'); ?>
+            <?php foreach ($departments as $department):
+                $rows = tlk_get_employee_performance($department, $year, $month);
+                $dept = tlk_get_department_performance($department, $year, $month); ?>
+                <h2 style="margin-top:28px;"><?php echo esc_html($department); ?> <small style="font-weight:400;">— <?php echo esc_html(number_format_i18n($dept['percent'],1)); ?>% goal attainment</small></h2>
+                <?php if (!$rows): ?><p>No production entries for this department in this period.</p><?php else: ?>
+                <table class="widefat striped" style="max-width:900px;">
+                    <thead><tr><th>Employee</th><th>Produced</th><th>Expected</th><th>Goal %</th></tr></thead>
+                    <tbody><?php foreach ($rows as $row):
+                        $key = base64_encode($department . '|' . $row['employee']); ?>
+                        <tr>
+                            <td><strong><?php echo esc_html($row['employee']); ?></strong></td>
+                            <td><?php echo esc_html(number_format_i18n($row['produced'])); ?></td>
+                            <td><input type="number" min="0" step="1" name="targets[<?php echo esc_attr($key); ?>]" value="<?php echo esc_attr($row['target']); ?>" style="width:100px;"></td>
+                            <td><?php echo esc_html(number_format_i18n($row['percent'],1)); ?>%</td>
+                        </tr>
+                    <?php endforeach; ?></tbody>
+                </table>
+                <?php endif; ?>
+            <?php endforeach; ?>
+            <p><button type="submit" class="button button-primary">Save Expected Production</button></p>
+        </form>
+    </div>
+    <?php
 }

@@ -37,10 +37,12 @@ $current_month = (int) wp_date('n');
 $on_time = tlk_get_on_time_delivery($current_year, $current_month);
 
 $current_period = wp_date('F Y', mktime(0, 0, 0, $current_month, 1, $current_year));
-$production_target = 60;
-$cnc_percent = min(100, (int) round(($cnc_quota['total'] / $production_target) * 100));
-$pouring_percent = min(100, (int) round(($pouring_quota['total'] / $production_target) * 100));
-$building_percent = min(100, (int) round(($building_quota['total'] / $production_target) * 100));
+$cnc_performance = tlk_get_department_performance('CNC', $current_year, $current_month);
+$pouring_performance = tlk_get_department_performance('Pouring', $current_year, $current_month);
+$building_performance = tlk_get_department_performance('Building', $current_year, $current_month);
+$cnc_percent = min(100, (int) round($cnc_performance['percent']));
+$pouring_percent = min(100, (int) round($pouring_performance['percent']));
+$building_percent = min(100, (int) round($building_performance['percent']));
 
 /* Employee select */
 $select_employee = tlk_select_employee();
@@ -343,15 +345,15 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
         <div class="tlk-production-grid">
             <?php
             $departments = array(
-                array('name' => 'CNC', 'quota' => $cnc_quota, 'percent' => $cnc_percent),
-                array('name' => 'Pouring', 'quota' => $pouring_quota, 'percent' => $pouring_percent),
-                array('name' => 'Building', 'quota' => $building_quota, 'percent' => $building_percent),
+                array('name' => 'CNC', 'quota' => $cnc_quota, 'performance' => $cnc_performance, 'percent' => $cnc_percent),
+                array('name' => 'Pouring', 'quota' => $pouring_quota, 'performance' => $pouring_performance, 'percent' => $pouring_percent),
+                array('name' => 'Building', 'quota' => $building_quota, 'performance' => $building_performance, 'percent' => $building_percent),
             );
             ?>
 
             <?php foreach ($departments as $department) : ?>
                 <?php
-                if ($department['quota']['met']) {
+                if ($department['performance']['met']) {
                     $production_status_class = 'is-good';
                 } elseif ($department['percent'] >= 50) {
                     $production_status_class = 'is-warning';
@@ -364,7 +366,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                     <div class="tlk-production-card__top">
                         <h2><?php echo esc_html($department['name']); ?></h2>
                         <span class="tlk-status-icon" aria-hidden="true">
-                            <?php echo $department['quota']['met'] ? '&#10003;' : '&#8595;'; ?>
+                            <?php echo $department['performance']['met'] ? '&#10003;' : '&#8595;'; ?>
                         </span>
                     </div>
 
@@ -376,8 +378,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                     <div class="tlk-production-card__bottom">
                         <div class="tlk-production-card__progress-info">
                             <strong>
-                                <?php echo esc_html(number_format_i18n($department['quota']['total'])); ?> /
-                                <?php echo esc_html(number_format_i18n($production_target)); ?>
+                                <?php echo esc_html(number_format_i18n($department['performance']['percent'], 1)); ?>% / 100%
                             </strong>
                             <strong><?php echo esc_html($department['percent']); ?>%</strong>
                         </div>
