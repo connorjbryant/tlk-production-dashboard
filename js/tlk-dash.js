@@ -1,4 +1,8 @@
 jQuery(document).ready(function ($) {
+    if (!$('.dash-container').length || !$('body').hasClass('tlk-prod-dash')) {
+        return;
+    }
+
     function forceDesktopViewport() {
         var metas = document.querySelectorAll('meta[name="viewport"]');
         if (!metas.length) {

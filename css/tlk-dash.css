@@ -42,11 +42,10 @@
 /* ---------------------------------------------------------
    Page shell
    --------------------------------------------------------- */
-html,
-body {
+html.tlk-prod-dash,
+body.tlk-prod-dash {
   margin: 0;
   padding: 0;
-  min-width: 1024px;
   background: #f5f5f5;
 }
 
@@ -740,4 +739,8 @@ body.tlk-prod-dash .tlk-internal-tools {
   display: flex !important;
   flex-direction: row !important;
   justify-content: space-between !important;
+}
+
+form.post-password-form {
+  padding: 5rem;
 }

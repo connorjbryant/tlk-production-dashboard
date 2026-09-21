@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 1.8.2
+ * Version: 1.8.4
  * Author: Connor Bryant
  * License: GPL-2.0+
  */
@@ -12,8 +12,19 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+function tlk_is_production_dashboard() {
+    if (!is_page()) {
+        return false;
+    }
+    return get_page_template_slug(get_the_ID()) === 'templates/page-template.php';
+}
+
 function tlk_dash_enqueue_assets(){
-    $version = '1.8.2';
+    if (!tlk_is_production_dashboard()) {
+        return;
+    }
+
+    $version = '1.8.4';
 
     wp_enqueue_style(
         'tlk_dash_styles',
@@ -39,10 +50,7 @@ add_action('wp_enqueue_scripts', 'tlk_dash_enqueue_assets');
  * Only output on the dashboard template to avoid affecting other pages.
  */
 function tlk_dash_viewport_meta() {
-    if (!is_page()) {
-        return;
-    }
-    if (get_page_template_slug(get_the_ID()) !== 'templates/page-template.php') {
+    if (!tlk_is_production_dashboard()) {
         return;
     }
     echo '<meta name="viewport" content="width=1920, initial-scale=1">' . "\n";
