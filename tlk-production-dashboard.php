@@ -1805,7 +1805,7 @@ function tlk_render_employee_performance_page() {
     ?>
     <div class="wrap">
         <h1>Employee Performance</h1>
-        <p>Private individual production detail. The public admin dashboard continues to show department-level results only.</p>
+        <p>Private individual production detail. The public admin dashboard shows department-level results.</p>
         <a href="/tlk-production-dashboard">Go To Dashboard Overview</a>
         <?php if (isset($_GET['department_targets_saved'])) : ?><div class="notice notice-success is-dismissible"><p>Department targets saved.</p></div><?php endif; ?>
 
