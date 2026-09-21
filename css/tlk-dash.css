@@ -34,9 +34,9 @@
   --tlk-radius-sm: 8px;
   --tlk-input-h: 50px;
   --tlk-btn-h: 48px;
-  --tlk-title: clamp(28px, 3vw, 40px);
-  --tlk-card-title: 32px;
-  --tlk-card-number: 80px;
+  --tlk-title: 44px;
+  --tlk-card-title: 34px;
+  --tlk-card-number: 84px;
 }
 
 /* ---------------------------------------------------------
@@ -44,6 +44,10 @@
    --------------------------------------------------------- */
 html.tlk-prod-dash,
 body.tlk-prod-dash {
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+  font-size: 22px;
+  line-height: 1.45;
   margin: 0;
   padding: 0;
   background: #f5f5f5;
@@ -91,6 +95,24 @@ body:not(.logged-in).tlk-prod-dash .site-content {
 .dash-container h1,
 .dash-container h2 {
   margin-top: 0;
+}
+
+/* Fixed typography: no viewport-based font scaling. */
+.dash-container h1 { font-size: 44px; }
+.dash-container h2 { font-size: 38px; }
+.dash-container h3 { font-size: 32px; }
+.dash-container h4 { font-size: 28px; }
+.dash-container h5 { font-size: 26px; }
+.dash-container h6 { font-size: 24px; }
+.dash-container p,
+.dash-container li,
+.dash-container td,
+.dash-container th,
+.dash-container label,
+.dash-container summary,
+.dash-container details,
+.dash-container span {
+  font-size: 22px;
 }
 
 .dash-container__form > p,
@@ -206,7 +228,7 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   border: 2px solid var(--tlk-border);
   border-radius: var(--tlk-radius-sm);
   background-color: #fff;
-  font-size: 16px;
+  font-size: 22px;
 }
 
 .dash-container input[type="submit"] {
@@ -250,7 +272,7 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   box-shadow: none;
   color: #fff;
   font-weight: 500;
-  font-size: 16px;
+  font-size: 22px;
   line-height: var(--tlk-btn-h);
   text-align: center;
   text-transform: capitalize;
@@ -404,7 +426,7 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   box-shadow: none;
   color: var(--tlk-bad);
   font-weight: 500;
-  font-size: 16px;
+  font-size: 22px;
   line-height: 44px;
   text-align: center;
   text-transform: capitalize;
@@ -578,7 +600,7 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   justify-content: space-between;
   gap: 15px;
   margin-bottom: 10px;
-  font-size: 17px;
+  font-size: 22px;
 }
 
 .tlk-production-card__progress-info strong:first-child {
@@ -642,7 +664,7 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   margin-top: 20px;
   padding-top: 15px;
   border-top: 1px solid rgba(0, 0, 0, 0.15);
-  font-size: 14px;
+  font-size: 20px;
 }
 
 .tlk-order-details__content p {
@@ -660,7 +682,7 @@ body:not(.logged-in).tlk-prod-dash .site-content {
    Sticky / reading aid — TV-friendly base font
    --------------------------------------------------------- */
 .dash-container {
-  font-size: 16px;
+  font-size: 22px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
@@ -673,7 +695,7 @@ body:not(.logged-in).tlk-prod-dash .site-content {
 
 /* Prevent text from becoming too small on TVs */
 .dash-container small {
-  font-size: 14px;
+  font-size: 20px;
 }
 /* =========================================================
    Drastic full-bleed desktop lock
@@ -743,4 +765,68 @@ body.tlk-prod-dash .tlk-internal-tools {
 
 form.post-password-form {
   padding: 5rem;
+}
+
+/* =========================================================
+   Permanent single-row layout — never stack by viewport width
+   Samsung Smart TVs can expose a narrow CSS viewport even when
+   the physical display is landscape. These rules intentionally
+   do not use media queries and never switch cards to columns.
+   ========================================================= */
+body.tlk-prod-dash .dash-container__department-row,
+body.tlk-prod-dash .dash-container__overview,
+body.tlk-prod-dash .tlk-production-grid,
+body.tlk-prod-dash .tlk-order-grid,
+body.tlk-prod-dash .production-entry-row,
+body.tlk-prod-dash .recent-entry__form {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  max-width: none !important;
+}
+
+body.tlk-prod-dash .dash-container__department-row > *,
+body.tlk-prod-dash .dash-container__overview > *,
+body.tlk-prod-dash .tlk-production-grid > *,
+body.tlk-prod-dash .tlk-order-grid > * {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  max-width: none !important;
+}
+
+body.tlk-prod-dash .production-entry-row > *,
+body.tlk-prod-dash .recent-entry__form > * {
+  min-width: 0 !important;
+}
+
+body.tlk-prod-dash .production-entry-field {
+  flex: 1 1 0 !important;
+}
+
+body.tlk-prod-dash .production-remove-row,
+body.tlk-prod-dash .recent-entry__save {
+  flex: 0 0 auto !important;
+  align-self: flex-end !important;
+}
+
+body.tlk-prod-dash .recent-entry__updated {
+  flex: 0 0 100% !important;
+}
+
+body.tlk-prod-dash .recent-entry__summary,
+body.tlk-prod-dash .recent-entry__main,
+body.tlk-prod-dash .recent-entry__meta,
+body.tlk-prod-dash .tlk-internal-tools {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+}
+
+body.tlk-prod-dash .tlk-production-card,
+body.tlk-prod-dash .tlk-order-card {
+  min-width: 0 !important;
+  max-width: none !important;
 }
