@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 1.6.9
+ * Version: 1.8.2
  * Author: Connor Bryant
  * License: GPL-2.0+
  */
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function tlk_dash_enqueue_assets(){
-    $version = '1.6.9';
+    $version = '1.8.2';
 
     wp_enqueue_style(
         'tlk_dash_styles',
@@ -34,51 +34,38 @@ function tlk_dash_enqueue_assets(){
 add_action('wp_enqueue_scripts', 'tlk_dash_enqueue_assets');
 
 /**
- * Flag large displays / Smart TVs before CSS applies.
- * Runs on every page (the class is harmless elsewhere) so we don't
- * depend on is_page_template() matching, which is fragile.
- */
-function tlk_dash_large_display_head() {
-    ?>
-    <script>
-    (function () {
-      var ua = navigator.userAgent || '';
-      var isTv = /Tizen|Web0S|WebOS|SmartTV|SMART-TV|SmartHub|SamsungBrowser\/[.0-9]+.*TV|HbbTV|NetCast|Viera|AFT|AppleTV|GoogleTV|BRAVIA/i.test(ua);
-      var wide = Math.max(
-        screen.width || 0,
-        screen.height || 0,
-        window.innerWidth || 0,
-        window.innerHeight || 0
-      ) >= 900;
-
-      if (isTv || wide) {
-        document.documentElement.classList.add('tlk-large-display');
-        if (document.body) {
-          document.body.classList.add('tlk-large-display');
-        } else {
-          document.addEventListener('DOMContentLoaded', function () {
-            document.body.classList.add('tlk-large-display');
-          });
-        }
-      }
-    })();
-    </script>
-    <?php
-}
-add_action('wp_head', 'tlk_dash_large_display_head', 1);
-
-/**
  * Force a desktop-class viewport so Smart TV browsers don't
  * report a tiny CSS viewport and trigger mobile breakpoints.
  * Only output on the dashboard template to avoid affecting other pages.
  */
 function tlk_dash_viewport_meta() {
-    if (!is_page_template('templates/page-template.php')) {
+    if (!is_page()) {
         return;
     }
-    echo '<meta name="viewport" content="width=1280, initial-scale=1">' . "\n";
+    if (get_page_template_slug(get_the_ID()) !== 'templates/page-template.php') {
+        return;
+    }
+    echo '<meta name="viewport" content="width=1920, initial-scale=1">' . "\n";
+    echo '<script>document.documentElement.className += " tlk-prod-dash";</script>' . "\n";
 }
 add_action('wp_head', 'tlk_dash_viewport_meta', 0);
+
+
+function tlk_dash_force_desktop_class($classes) {
+    $classes[] = 'tlk-prod-dash';
+    return $classes;
+}
+
+function tlk_dash_maybe_force_desktop() {
+    if (!is_page()) {
+        return;
+    }
+    $selected = get_page_template_slug(get_the_ID());
+    if ($selected === 'templates/page-template.php') {
+        add_filter('body_class', 'tlk_dash_force_desktop_class', 99);
+    }
+}
+add_action('wp', 'tlk_dash_maybe_force_desktop');
 
 /**
  * Add page template(s)

@@ -1,7 +1,17 @@
 /* =========================================================
-   Production dashboard
-   Tokens keep repeated colors / radii / type in one place
+   TLK Production Dashboard — TV-first layout
+
+   IMPORTANT: This stylesheet contains NO media queries.
+   Samsung Tizen browsers report a fake narrow CSS viewport
+   even on large landscape displays, which used to trigger
+   the mobile breakpoints. By removing every breakpoint, the
+   dashboard renders identically on phone, tablet, desktop,
+   and Smart TV — always as the full landscape layout.
    ========================================================= */
+
+/* ---------------------------------------------------------
+   Design tokens
+   --------------------------------------------------------- */
 .tlk-prod-dash,
 .dash-container {
   --tlk-black: #000;
@@ -25,17 +35,25 @@
   --tlk-input-h: 50px;
   --tlk-btn-h: 48px;
   --tlk-title: clamp(28px, 3vw, 40px);
+  --tlk-card-title: 32px;
+  --tlk-card-number: 80px;
 }
 
-/* Remove default page banner */
-.tlk-prod-dash.header-v1 .page-header .page-header-content {
-  display: none;
+/* ---------------------------------------------------------
+   Page shell
+   --------------------------------------------------------- */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-width: 1024px;
+  background: #f5f5f5;
 }
 
-/* Production Dashboard — logged-out users only */
 body:not(.logged-in).tlk-prod-dash .site-header .clearfix,
 body:not(.logged-in).tlk-prod-dash .footer-widgets,
-body:not(.logged-in).tlk-prod-dash footer {
+body:not(.logged-in).tlk-prod-dash footer,
+.tlk-prod-dash.header-v1 .page-header .page-header-content {
   display: none;
 }
 
@@ -44,13 +62,29 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   padding-bottom: 0 !important;
 }
 
-/* Shared titles */
+/* ---------------------------------------------------------
+   Main container
+   --------------------------------------------------------- */
+.dash-container {
+  width: 100%;
+  max-width: none;
+  margin: 0 auto;
+  padding: 0;
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+/* ---------------------------------------------------------
+   Titles
+   --------------------------------------------------------- */
 .tlk-prod-dash h1,
 .dash-container__form h1,
 .recent-entries__header h2 {
   margin: 0 0 0.35rem;
   font-size: var(--tlk-title);
-  line-height: 1;
+  line-height: 1.1;
   font-weight: 700;
   color: var(--tlk-black);
 }
@@ -67,13 +101,9 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   font-weight: 500;
 }
 
-/* Layout */
-.dash-container {
-  width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
+/* ---------------------------------------------------------
+   Department row (select + image)
+   --------------------------------------------------------- */
 .dash-container__department-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -92,6 +122,7 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   min-height: 180px;
   max-height: 180px;
   overflow: hidden;
+  border-radius: var(--tlk-radius);
 }
 
 .department-image img {
@@ -102,7 +133,9 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   object-fit: cover;
 }
 
-/* Shared panel shell */
+/* ---------------------------------------------------------
+   Shared panel shell
+   --------------------------------------------------------- */
 .dash-container__form,
 .dash-container__recent-entries {
   width: 100%;
@@ -122,7 +155,9 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   border: 0;
 }
 
-/* Patterned cards (department + multi-person rows) */
+/* ---------------------------------------------------------
+   Patterned cards (department + production rows)
+   --------------------------------------------------------- */
 .dash-container__bg,
 .production-entry-row {
   padding: 1.15rem 1.25rem;
@@ -133,10 +168,12 @@ body:not(.logged-in).tlk-prod-dash .site-content {
 
 .dash-container__bg {
   margin-bottom: 1rem;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='360' height='360' viewBox='0 0 360 360'%3E%3Cpath fill='%23cecece' fill-opacity='0.4' d='M0 85.02l4.62-4.27a49.09 49.09 0 0 0 7.33 3.74l-1.2 10.24 2.66.87 5.05-9c2.62.65 5.34 1.08 8.12 1.28L28.6 98h2.8l2.02-10.12c2.74-.2 5.46-.62 8.12-1.28l5.05 8.99 2.66-.86-1.2-10.24c2.55-1.03 5-2.29 7.33-3.74l7.58 7 2.26-1.65-4.3-9.38a48.3 48.3 0 0 0 5.8-5.8l9.38 4.3 1.65-2.26-7-7.58a49.09 49.09 0 0 0 3.74-7.33l10.24 1.2.87-2.66-9-5.05a48.07 48.07 0 0 0 1.28-8.12L88 41.4v-2.8l-10.12-2.02c-.2-2.74-.62-5.46-1.28-8.12l8.99-5.05-.86-2.66-10.24 1.2c-1.03-2.55-2.29-5-3.74-7.33l7-7.58-1.65-2.26-9.38 4.3a48.3 48.3 0 0 0-5.8-5.8L62.42 0h2.16l-1.25 2.72a50.31 50.31 0 0 1 3.95 3.95l9.5-4.36 3.52 4.85-7.08 7.68c.94 1.6 1.79 3.27 2.54 4.98l10.38-1.21 1.85 5.7-9.11 5.12c.39 1.8.68 3.65.87 5.52L90 37v6l-10.25 2.05a49.9 49.9 0 0 1-.87 5.52l9.11 5.12-1.85 5.7-10.38-1.21c-.75 1.7-1.6 3.37-2.54 4.98l7.08 7.68-3.52 4.85-9.5-4.36a50.31 50.31 0 0 1-3.95 3.95l4.36 9.5-4.85 3.52-7.68-7.08c-1.6.94-3.27 1.79-4.98 2.54l1.21 10.38-5.7 1.85-5.12-9.11c-1.8.39-3.65.68-5.52.87L33 100h-6l-2.05-10.25a49.9 49.9 0 0 1-5.52-.87l-5.12 9.11-5.7-1.85 1.21-10.38c-1.7-.75-3.37-1.6-4.98-2.54L0 87.68v-2.66zM0 52.7V27.3l8.38 4.84a22.96 22.96 0 0 0 0 15.72L0 52.7zm0-39.16A39.91 39.91 0 0 1 26 .2v17.15a22.98 22.98 0 0 0-13.62 7.86L0 18.06v-4.52zm0 52.92v-4.52l12.38-7.15A22.98 22.98 0 0 0 26 62.65V79.8A39.91 39.91 0 0 1 0 66.46zM34 79.8V62.65a22.98 22.98 0 0 0 13.62-7.86l14.85 8.58A39.97 39.97 0 0 1 34 79.8zm32.48-23.36l-14.86-8.58a22.96 22.96 0 0 0 0-15.72l14.86-8.58A39.86 39.86 0 0 1 70 40a39.9 39.9 0 0 1-3.52 16.44zm-4.01-39.8L47.62 25.2A22.98 22.98 0 0 0 34 17.35V.2a39.97 39.97 0 0 1 28.47 16.43v.01zM0 50.38l5.98-3.45a25.01 25.01 0 0 1 0-13.88L0 29.6v20.78zm.5-34.35l11.48 6.63c3.27-3.4 7.44-5.8 12.02-6.94V2.47A37.96 37.96 0 0 0 .5 16.04v-.01zm0 47.92A37.96 37.96 0 0 0 24 77.53V64.28a24.97 24.97 0 0 1-12.02-6.95L.5 63.96v-.01zM36 77.53a37.96 37.96 0 0 0 23.5-13.57l-11.48-6.63A24.97 24.97 0 0 1 36 64.28v13.25zm29.5-23.96a37.91 37.91 0 0 0 0-27.14l-11.48 6.63a25.01 25.01 0 0 1 0 13.88l11.49 6.63h-.01zm-6-37.53A37.96 37.96 0 0 0 36 2.47v13.25c4.66 1.15 8.8 3.6 12.02 6.95l11.48-6.63zM30 54a14 14 0 1 1 0-28 14 14 0 0 1 0 28zm0-2a12 12 0 1 0 0-24 12 12 0 0 0 0 24zm0-2a10 10 0 1 1 0-20 10 10 0 0 1 0 20zm0-2a8 8 0 1 0 0-16 8 8 0 0 0 0 16z'%3E%3C/path%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='360' height='360' viewBox='0 0 360 360'%3E%3Cpath fill='%23cecece' fill-opacity='0.4' d='M0 85.02l4.62-4.27a49.09 49.09 0 0 0 7.33 3.74l-1.2 10.24 2.66.87 5.05-9c2.62.65 5.34 1.08 8.12 1.28L28.6 98h2.8l2.02-10.12c2.74-.2 5.46-.62 8.12-1.28l5.05 8.99 2.66-.86-1.2-10.24c2.55-1.03 5-2.29 7.33-3.74l7.58 7 2.26-1.65-4.3-9.38a48.3 48.3 0 0 0 5.8-5.8l9.38 4.3 1.65-2.26-7-7.58a49.09 49.09 0 0 0 3.74-7.33l10.24 1.2.87-2.66-9-5.05a48.07 48.07 0 0 0 1.28-8.12L88 41.4v-2.8l-10.12-2.02c-.2-2.74-.62-5.46-1.28-8.12l8.99-5.05-.86-2.66-10.24 1.2c-1.03-2.55-2.29-5-3.74-7.33l7-7.58-1.65-2.26-9.38 4.3a48.3 48.3 0 0 0-5.8-5.8L62.42 0h2.16l-1.25 2.72a50.31 50.31 0 0 1 3.95 3.95l9.5-4.36 3.52 4.85-7.08 7.68c.94 1.6 1.79 3.27 2.54 4.98l10.38-1.21 1.85 5.7-9.11 5.12c.39 1.8.68 3.65.87 5.52L90 37v6l-10.25 2.05a49.9 49.9 0 0 1-.87 5.52l9.11 5.12-1.85 5.7-10.38-1.21c-.75 1.7-1.6 3.37-2.54 4.98l7.08 7.68-3.52 4.85-9.5-4.36a50.31 50.31 0 0 1-3.95 3.95l4.36 9.5-4.85 3.52-7.68-7.08c-1.6.94-3.27 1.79-4.98 2.54l1.21 10.38-5.7 1.85-5.12-9.11c-1.8.39-3.65.68-5.52.87L33 100h-6l-2.05-10.25a49.9 49.9 0 0 1-5.52-.87l-5.12 9.11-5.7-1.85 1.21-10.38c-1.7-.75-3.37-1.6-4.98-2.54L0 87.68v-2.66z'%3E%3C/path%3E%3C/svg%3E");
 }
 
-/* Form fields */
+/* ---------------------------------------------------------
+   Form fields
+   --------------------------------------------------------- */
 .dash-container label {
   display: block;
   margin-bottom: 0.35rem;
@@ -169,6 +206,8 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   padding: 0 12px;
   border: 2px solid var(--tlk-border);
   border-radius: var(--tlk-radius-sm);
+  background-color: #fff;
+  font-size: 16px;
 }
 
 .dash-container input[type="submit"] {
@@ -176,12 +215,9 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   min-width: 150px;
 }
 
-.dashboard-month-filter {
-  width: 100%;
-  background-color: var(--tlk-panel);
-}
-
-/* Overview cards */
+/* ---------------------------------------------------------
+   Overview / primary buttons
+   --------------------------------------------------------- */
 .dash-container__overview {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -201,7 +237,6 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   overflow-x: auto;
 }
 
-/* Primary buttons */
 .prod-entry-submit,
 .recent-entry__save,
 .production-add-row,
@@ -216,6 +251,7 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   box-shadow: none;
   color: #fff;
   font-weight: 500;
+  font-size: 16px;
   line-height: var(--tlk-btn-h);
   text-align: center;
   text-transform: capitalize;
@@ -242,7 +278,9 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   text-decoration: underline;
 }
 
-/* Recent production entries */
+/* ---------------------------------------------------------
+   Recent entries
+   --------------------------------------------------------- */
 .recent-entries__header h2 {
   margin-bottom: 0.25rem;
 }
@@ -307,7 +345,9 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   grid-column: 1 / -1;
 }
 
-/* Quota / status inputs */
+/* ---------------------------------------------------------
+   Quota / status inputs
+   --------------------------------------------------------- */
 .js-goodquota,
 .js-badquota,
 .standard-status {
@@ -328,7 +368,9 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   border: 2px solid var(--tlk-border) !important;
 }
 
-/* Multi-person production entry */
+/* ---------------------------------------------------------
+   Multi-person production entry
+   --------------------------------------------------------- */
 .production-entry-list {
   display: grid;
   gap: 1rem;
@@ -363,6 +405,7 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   box-shadow: none;
   color: var(--tlk-bad);
   font-weight: 500;
+  font-size: 16px;
   line-height: 44px;
   text-align: center;
   text-transform: capitalize;
@@ -380,9 +423,9 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   opacity: 0.45;
 }
 
-/* =========================================================
-   Production and order statistics
-   ========================================================= */
+/* ---------------------------------------------------------
+   Statistics sections
+   --------------------------------------------------------- */
 .tlk-stats-section,
 .tlk-internal-tools {
   width: 100%;
@@ -423,6 +466,7 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   border: 2px solid var(--tlk-border);
   border-radius: 20px;
   box-shadow: var(--tlk-shadow);
+  min-height: 280px;
 }
 
 .tlk-production-card {
@@ -446,13 +490,13 @@ body:not(.logged-in).tlk-prod-dash .site-content {
 }
 
 .tlk-production-card__top h2 {
-  font-size: 34px;
+  font-size: var(--tlk-card-title);
   line-height: 1.1;
 }
 
 .tlk-order-card h2 {
   margin-bottom: 30px;
-  font-size: 32px;
+  font-size: var(--tlk-card-title);
   line-height: 1.35;
 }
 
@@ -462,7 +506,7 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   justify-content: center;
   margin: 0;
   background: transparent;
-  font-size: 34px;
+  font-size: var(--tlk-card-title);
   line-height: 1;
   font-weight: 400;
 }
@@ -471,18 +515,14 @@ body:not(.logged-in).tlk-prod-dash .site-content {
 .tlk-order-card__number {
   font-weight: 700;
   line-height: 1;
+  font-size: var(--tlk-card-number);
 }
 
 .tlk-production-card__number {
   margin-top: 26px;
-  font-size: 88px;
 }
 
-.tlk-order-card__number {
-  font-size: 82px;
-}
-
-/* Shared status colors for production + order cards */
+/* Status colors */
 .tlk-production-card.is-good,
 .tlk-order-card--good {
   border-color: var(--tlk-good);
@@ -613,280 +653,91 @@ body:not(.logged-in).tlk-prod-dash .site-content {
 .tlk-internal-tools {
   display: flex;
   justify-content: space-between;
-  padding: 28px 26px;
-}
-
-/* =========================================================
-   Smart TV / large display — force desktop layout
-   This block comes FIRST so mobile breakpoints below can't
-   accidentally match a TV viewport. Uses min-device-width
-   which Tizen/Samsung TVs report correctly even when the
-   CSS viewport reports a small width.
-   ========================================================= */
-@media (min-device-width: 900px) {
-  .dash-container__department-row {
-    grid-template-columns: 1fr 1fr !important;
-  }
-
-  .dash-container__overview,
-  .tlk-production-grid,
-  .tlk-order-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-  }
-
-  .production-entry-row {
-    grid-template-columns: minmax(220px, 1fr) minmax(180px, 0.65fr) auto !important;
-  }
-
-  .recent-entry__form {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) auto !important;
-  }
-
-  .recent-entry__summary,
-  .recent-entry__main,
-  .recent-entry__meta {
-    flex-direction: row !important;
-    align-items: center !important;
-  }
-
-  .recent-entry__edit {
-    padding-left: 0 !important;
-  }
-
-  .tlk-internal-tools {
-    gap: 0 !important;
-  }
-
-  .tlk-production-card,
-  .tlk-order-card {
-    min-height: 280px !important;
-    padding: 28px 26px !important;
-    border-radius: 20px !important;
-  }
-
-  .tlk-production-card__top h2,
-  .tlk-order-card h2 {
-    font-size: 32px !important;
-  }
-
-  .tlk-production-card__number,
-  .tlk-order-card__number {
-    font-size: 80px !important;
-  }
-
-  .prod-entry-submit,
-  .recent-entry__save,
-  .production-add-row {
-    height: var(--tlk-btn-h) !important;
-    line-height: var(--tlk-btn-h) !important;
-  }
-
-  .tlk-internal-tools__button {
-    height: 50px !important;
-    line-height: 52px !important;
-  }
-
-  .tlk-stats-section {
-    margin-bottom: 0 !important;
-  }
-}
-
-/* =========================================================
-   Tablet / small laptop
-   ========================================================= */
-@media (max-width: 950px) {
-  .tlk-production-grid,
-  .tlk-order-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .tlk-production-card,
-  .tlk-order-card {
-    min-height: 280px;
-  }
-}
-
-/* =========================================================
-   Phones only — lowered from 768px to 600px so Smart TVs
-   that report a small CSS viewport do NOT match.
-   ========================================================= */
-@media (max-width: 600px) {
-  .dash-container {
-    padding: 1rem;
-  }
-
-  .dash-container__department-row,
-  .production-entry-row,
-  .dash-container__overview,
-  .tlk-production-grid,
-  .tlk-order-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .dash-container__form,
-  .dash-container__recent-entries {
-    padding: 24px 22px;
-    border-radius: 0;
-  }
-
-  .dash-container select,
-  .dash-container input:not([type="submit"]),
-  .dash-container input[type="submit"] {
-    width: 100%;
-    max-width: none;
-  }
-
-  .recent-entry__summary,
-  .recent-entry__main,
-  .recent-entry__meta {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .recent-entry__form {
-    grid-template-columns: 1fr;
-  }
-
-  .recent-entry__edit {
-    padding-left: 0;
-  }
-
-  .tlk-stats-section {
-    margin-bottom: 3rem;
-  }
-
-  .tlk-stats-title {
-    margin-bottom: 1.5rem !important;
-  }
-
-  .tlk-production-card,
-  .tlk-order-card {
-    min-height: 250px;
-    padding: 24px 22px;
-    border-radius: var(--tlk-radius);
-  }
-
-  .tlk-production-card__top h2,
-  .tlk-order-card h2 {
-    font-size: 27px;
-  }
-
-  .tlk-production-card__number,
-  .tlk-order-card__number {
-    font-size: 64px;
-  }
-
-  .prod-entry-submit,
-  .recent-entry__save,
-  .production-add-row,
-  .tlk-internal-tools__button {
-    height: fit-content;
-  }
-
-  .tlk-internal-tools {
-    gap: 1rem;
-  }
-
-  .tlk-internal-tools__button {
-    line-height: 25px;
-  }
-}
-
-/* =========================================================
-   Large display / Smart TV override (JS-added class)
-   Must come AFTER mobile rules. html class is set in <head>.
-   ========================================================= */
-html.tlk-large-display .dash-container,
-body.tlk-large-display .dash-container {
-  padding: 0;
-}
-
-html.tlk-large-display .dash-container__department-row,
-body.tlk-large-display .dash-container__department-row {
-  grid-template-columns: 1fr 1fr;
-}
-
-html.tlk-large-display .dash-container__overview,
-html.tlk-large-display .tlk-production-grid,
-html.tlk-large-display .tlk-order-grid,
-body.tlk-large-display .dash-container__overview,
-body.tlk-large-display .tlk-production-grid,
-body.tlk-large-display .tlk-order-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-html.tlk-large-display .production-entry-row,
-body.tlk-large-display .production-entry-row {
-  grid-template-columns: minmax(220px, 1fr) minmax(180px, 0.65fr) auto;
-}
-
-html.tlk-large-display .dash-container__form,
-html.tlk-large-display .dash-container__recent-entries,
-body.tlk-large-display .dash-container__form,
-body.tlk-large-display .dash-container__recent-entries {
-  padding: 28px 26px;
-  border-radius: 0;
-}
-
-html.tlk-large-display .recent-entry__form,
-body.tlk-large-display .recent-entry__form {
-  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
-}
-
-html.tlk-large-display .recent-entry__summary,
-html.tlk-large-display .recent-entry__main,
-html.tlk-large-display .recent-entry__meta,
-body.tlk-large-display .recent-entry__summary,
-body.tlk-large-display .recent-entry__main,
-body.tlk-large-display .recent-entry__meta {
-  flex-direction: row;
   align-items: center;
-}
-
-html.tlk-large-display .tlk-production-card,
-html.tlk-large-display .tlk-order-card,
-body.tlk-large-display .tlk-production-card,
-body.tlk-large-display .tlk-order-card {
-  min-height: 280px;
   padding: 28px 26px;
 }
 
-html.tlk-large-display .tlk-production-card__top h2,
-html.tlk-large-display .tlk-order-card h2,
-body.tlk-large-display .tlk-production-card__top h2,
-body.tlk-large-display .tlk-order-card h2 {
-  font-size: 32px;
+/* ---------------------------------------------------------
+   Sticky / reading aid — TV-friendly base font
+   --------------------------------------------------------- */
+.dash-container {
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
-html.tlk-large-display .tlk-production-card__number,
-html.tlk-large-display .tlk-order-card__number,
-body.tlk-large-display .tlk-production-card__number,
-body.tlk-large-display .tlk-order-card__number {
-  font-size: 80px;
+.dash-container h1,
+.dash-container h2,
+.dash-container h3 {
+  letter-spacing: -0.01em;
 }
 
-html.tlk-large-display .prod-entry-submit,
-html.tlk-large-display .recent-entry__save,
-html.tlk-large-display .production-add-row,
-body.tlk-large-display .prod-entry-submit,
-body.tlk-large-display .recent-entry__save,
-body.tlk-large-display .production-add-row {
-  height: var(--tlk-btn-h);
-  line-height: var(--tlk-btn-h);
+/* Prevent text from becoming too small on TVs */
+.dash-container small {
+  font-size: 14px;
+}
+/* =========================================================
+   Drastic full-bleed desktop lock
+   Beat theme containers + any leftover mobile rules
+   ========================================================= */
+html.tlk-prod-dash,
+body.tlk-prod-dash,
+body.tlk-prod-dash .site,
+body.tlk-prod-dash #page,
+body.tlk-prod-dash #wrapper,
+body.tlk-prod-dash .site-content,
+body.tlk-prod-dash #content,
+body.tlk-prod-dash #primary,
+body.tlk-prod-dash .content-area,
+body.tlk-prod-dash .content-container,
+body.tlk-prod-dash .fusion-row,
+body.tlk-prod-dash .fusion-page-content,
+body.tlk-prod-dash .container,
+body.tlk-prod-dash .wrap,
+body.tlk-prod-dash .inner,
+body.tlk-prod-dash .inner-container,
+body.tlk-prod-dash main,
+body.tlk-prod-dash .dash-container {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  float: none !important;
+  box-sizing: border-box !important;
 }
 
-html.tlk-large-display .tlk-internal-tools,
-body.tlk-large-display .tlk-internal-tools {
-  gap: 0;
+body.tlk-prod-dash .dash-container__department-row {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
 }
 
-html.tlk-large-display .tlk-internal-tools__button,
-body.tlk-large-display .tlk-internal-tools__button {
-  height: 50px;
-  line-height: 52px;
+body.tlk-prod-dash .dash-container__overview,
+body.tlk-prod-dash .tlk-production-grid,
+body.tlk-prod-dash .tlk-order-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
 }
 
-html.tlk-large-display .tlk-stats-section,
-body.tlk-large-display .tlk-stats-section {
-  margin-bottom: 0;
+body.tlk-prod-dash .production-entry-row {
+  display: grid !important;
+  grid-template-columns: minmax(220px, 1fr) minmax(180px, 0.65fr) auto !important;
+}
+
+body.tlk-prod-dash .recent-entry__form {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto !important;
+}
+
+body.tlk-prod-dash .recent-entry__summary,
+body.tlk-prod-dash .recent-entry__main,
+body.tlk-prod-dash .recent-entry__meta {
+  flex-direction: row !important;
+  align-items: center !important;
+}
+
+body.tlk-prod-dash .tlk-internal-tools {
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: space-between !important;
 }

@@ -58,10 +58,8 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
 
 ?>
 
-<main class="dash-container"
-    <?php if ($selectedBg) : ?>
-    style="background-image: url('<?php echo esc_url($selectedBg); ?>');">
-    <?php endif; ?>
+<main class="dash-container" style="width:100%;max-width:none;<?php echo $selectedBg ? "background-image:url('" . esc_url($selectedBg) . "');" : ''; ?>">
+
     <?php
     $current_user = wp_get_current_user();
 

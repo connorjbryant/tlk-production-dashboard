@@ -1,21 +1,39 @@
 jQuery(document).ready(function ($) {
-    function flagLargeDisplay() {
-        var ua = navigator.userAgent || '';
-        var isTv = /Tizen|Web0S|WebOS|SmartTV|SMART-TV|SmartHub|SamsungBrowser\/[.0-9]+.*TV|HbbTV|NetCast|Viera|AFT|AppleTV|GoogleTV|BRAVIA/i.test(ua);
-        var wide = Math.max(
-            screen.width || 0,
-            screen.height || 0,
-            window.innerWidth || 0,
-            window.innerHeight || 0
-        ) >= 900;
-
-        if (isTv || wide) {
-            document.documentElement.classList.add('tlk-large-display');
-            document.body.classList.add('tlk-large-display');
+    function forceDesktopViewport() {
+        var metas = document.querySelectorAll('meta[name="viewport"]');
+        if (!metas.length) {
+            var meta = document.createElement('meta');
+            meta.setAttribute('name', 'viewport');
+            meta.setAttribute('content', 'width=1920, initial-scale=1');
+            document.head.appendChild(meta);
+        } else {
+            metas.forEach(function (meta) {
+                meta.setAttribute('content', 'width=1920, initial-scale=1');
+            });
         }
     }
 
-    flagLargeDisplay();
+    function blowOpenThemeWrappers() {
+        document.documentElement.classList.add('tlk-prod-dash');
+        document.body.classList.add('tlk-prod-dash');
+
+        var nodes = document.querySelectorAll(
+            'body.tlk-prod-dash, body.tlk-prod-dash .site, body.tlk-prod-dash #page, body.tlk-prod-dash #wrapper, body.tlk-prod-dash .site-content, body.tlk-prod-dash #content, body.tlk-prod-dash #primary, body.tlk-prod-dash .content-area, body.tlk-prod-dash .fusion-row, body.tlk-prod-dash .container, body.tlk-prod-dash .wrap, body.tlk-prod-dash main, body.tlk-prod-dash .dash-container'
+        );
+
+        nodes.forEach(function (el) {
+            el.style.setProperty('width', '100%', 'important');
+            el.style.setProperty('max-width', 'none', 'important');
+            el.style.setProperty('min-width', '0', 'important');
+            el.style.setProperty('float', 'none', 'important');
+            el.style.setProperty('margin-left', '0', 'important');
+            el.style.setProperty('margin-right', '0', 'important');
+        });
+    }
+
+    forceDesktopViewport();
+    blowOpenThemeWrappers();
+    $(window).on('resize orientationchange', blowOpenThemeWrappers);
 
     var $departmentSelect = $('#department');
     var $departmentImage = $('#department-image');
@@ -65,7 +83,6 @@ jQuery(document).ready(function ($) {
 
     updateRemoveButtons();
 
-    // Development helper for testing monthly backgrounds.
     window.testMonth = function (month) {
         $('.dash-container').css(
             'background-image',
