@@ -50,7 +50,7 @@ body:not(.logged-in).tlk-prod-dash .site-content {
 .recent-entries__header h2 {
   margin: 0 0 0.35rem;
   font-size: var(--tlk-title);
-  line-height: 1.15;
+  line-height: 1.0;
   font-weight: 700;
   color: var(--tlk-black);
 }
