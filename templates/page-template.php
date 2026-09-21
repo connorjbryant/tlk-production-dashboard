@@ -75,7 +75,14 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
 
     $can_add_employee = (strtolower((string) $current_user->user_email) === 'connor@flexrockperformance.com');
 
-    if (in_array($current_user->user_email, $allowed_emails, true)) { ?>
+    $is_allowed_user = is_user_logged_in() && in_array(strtolower((string) $current_user->user_email), $allowed_emails, true);
+
+    if ($is_allowed_user) { ?>
+
+    <div class="tlk-internal-tools">
+        <h1><?php echo esc_html($current_period); ?></h1>
+        <a class="tlk-internal-tools__button" href="<?php echo esc_url(admin_url('admin.php?page=tlk-employee-performance')); ?>">Employee Performance &amp; Targets</a>
+    </div>
 
     <div class="dash-container__form">
         <h1>Production Entry Log</h1>

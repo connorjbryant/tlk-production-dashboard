@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 1.6.0
+ * Version: 1.6.4
  * Author: Connor Bryant
  * License: GPL-2.0+
  */
@@ -18,7 +18,7 @@ function tlk_dash_enqueue_assets(){
         'tlk_dash_styles',
         plugins_url('css/tlk-dash.css', __FILE__),
         array(),
-        '1.6.0',
+        '1.6.4',
         'all'
     );
 
@@ -27,7 +27,7 @@ function tlk_dash_enqueue_assets(){
         'tlk_dash_script',
         plugins_url('js/tlk-dash.js', __FILE__),
         array('jquery'),
-        '1.6.0',
+        '1.6.4',
         true
     );
 }
@@ -1577,7 +1577,7 @@ add_filter(
 function tlk_department_quota($department) {
     global $wpdb;
 
-    $target_num = 60;
+    $target_num = tlk_get_department_target($department);
     $table_name = $wpdb->prefix . 'tlk_production';
 
     $current_year  = (int) wp_date('Y');
@@ -1623,6 +1623,57 @@ function pouring_quota() {
 function building_quota() {
     return tlk_department_quota('Building');
 }
+/**
+ * Department-level monthly targets used by the frontend average-parts metric.
+ * Stored in wp_options so they can be edited without changing PHP.
+ */
+function tlk_get_department_targets() {
+    $defaults = array(
+        'CNC'      => 60,
+        'Pouring'  => 60,
+        'Building' => 60,
+    );
+
+    $saved = get_option('tlk_department_targets', array());
+    if (!is_array($saved)) {
+        $saved = array();
+    }
+
+    return array_merge($defaults, $saved);
+}
+
+function tlk_get_department_target($department) {
+    $targets = tlk_get_department_targets();
+    return isset($targets[$department]) ? (float) $targets[$department] : 60.0;
+}
+
+function tlk_save_department_targets() {
+    if (!tlk_can_manage_employee_performance()) {
+        wp_die('You are not allowed to manage department targets.');
+    }
+
+    check_admin_referer('tlk_save_department_targets');
+
+    $departments = array('CNC', 'Pouring', 'Building');
+    $posted = isset($_POST['department_targets']) ? (array) wp_unslash($_POST['department_targets']) : array();
+    $targets = tlk_get_department_targets();
+
+    foreach ($departments as $department) {
+        if (isset($posted[$department])) {
+            $targets[$department] = max(0, (float) $posted[$department]);
+        }
+    }
+
+    update_option('tlk_department_targets', $targets, false);
+
+    wp_safe_redirect(add_query_arg(array(
+        'page' => 'tlk-employee-performance',
+        'department_targets_saved' => '1',
+    ), admin_url('admin.php')));
+    exit;
+}
+add_action('admin_post_tlk_save_department_targets', 'tlk_save_department_targets');
+
 /**
  * Individual employee production targets + private performance reporting.
  * Targets are monthly and are used only to calculate department goal attainment.
@@ -1754,7 +1805,28 @@ function tlk_render_employee_performance_page() {
     ?>
     <div class="wrap">
         <h1>Employee Performance</h1>
-        <p>Private individual production detail. The public dashboard continues to show department-level results only.</p>
+        <p>Private individual production detail. The public admin dashboard continues to show department-level results only.</p>
+        <a href="/tlk-production-dashboard">Go To Dashboard Overview</a>
+        <?php if (isset($_GET['department_targets_saved'])) : ?><div class="notice notice-success is-dismissible"><p>Department targets saved.</p></div><?php endif; ?>
+
+        <?php $department_targets = tlk_get_department_targets(); ?>
+        <div class="card" style="max-width:900px;margin:18px 0;padding:18px 22px;">
+            <h2 style="margin-top:0;">Department Targets</h2>
+            <p>Set a goal number of parts people should make on average.</p>
+            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                <input type="hidden" name="action" value="tlk_save_department_targets">
+                <?php wp_nonce_field('tlk_save_department_targets'); ?>
+                <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end;">
+                    <?php foreach (array('CNC','Pouring','Building') as $target_department) : ?>
+                        <label>
+                            <strong><?php echo esc_html($target_department); ?></strong><br>
+                            <input type="number" min="0" step="1" name="department_targets[<?php echo esc_attr($target_department); ?>]" value="<?php echo esc_attr($department_targets[$target_department]); ?>" style="width:120px;">
+                        </label>
+                    <?php endforeach; ?>
+                    <button type="submit" class="button button-primary">Save Department Targets</button>
+                </div>
+            </form>
+        </div>
         <?php if (isset($_GET['targets_saved'])) : ?><div class="notice notice-success is-dismissible"><p>Employee targets saved.</p></div><?php endif; ?>
         <form method="get" style="margin:18px 0;display:flex;gap:8px;align-items:center;">
             <input type="hidden" name="page" value="tlk-employee-performance">
