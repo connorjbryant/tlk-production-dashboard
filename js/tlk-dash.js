@@ -1,4 +1,22 @@
 jQuery(document).ready(function ($) {
+    function flagLargeDisplay() {
+        var ua = navigator.userAgent || '';
+        var isTv = /Tizen|Web0S|WebOS|SmartTV|SMART-TV|SmartHub|SamsungBrowser\/[.0-9]+.*TV|HbbTV|NetCast|Viera|AFT|AppleTV|GoogleTV|BRAVIA/i.test(ua);
+        var wide = Math.max(
+            screen.width || 0,
+            screen.height || 0,
+            window.innerWidth || 0,
+            window.innerHeight || 0
+        ) >= 900;
+
+        if (isTv || wide) {
+            document.documentElement.classList.add('tlk-large-display');
+            document.body.classList.add('tlk-large-display');
+        }
+    }
+
+    flagLargeDisplay();
+
     var $departmentSelect = $('#department');
     var $departmentImage = $('#department-image');
 
@@ -51,7 +69,7 @@ jQuery(document).ready(function ($) {
     window.testMonth = function (month) {
         $('.dash-container').css(
             'background-image',
-            `url("/wp-content/plugins/tlk-production-dashboard/images/${month}.jpg")`
+            'url("/wp-content/plugins/tlk-production-dashboard/images/' + month + '.jpg")'
         );
     };
 

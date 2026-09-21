@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 1.6.5
+ * Version: 1.6.8
  * Author: Connor Bryant
  * License: GPL-2.0+
  */
@@ -13,26 +13,53 @@ if (!defined('ABSPATH')) {
 }
 
 function tlk_dash_enqueue_assets(){
-    // Enqueue CSS file
+    $version = '1.6.8';
+
     wp_enqueue_style(
         'tlk_dash_styles',
         plugins_url('css/tlk-dash.css', __FILE__),
         array(),
-        '1.6.5',
+        $version,
         'all'
     );
 
-    // Enqueue JavaScript file
     wp_enqueue_script(
         'tlk_dash_script',
         plugins_url('js/tlk-dash.js', __FILE__),
         array('jquery'),
-        '1.6.5',
+        $version,
         true
     );
 }
-// Hook the function into wp_enqueue_scripts for the site front-end
 add_action('wp_enqueue_scripts', 'tlk_dash_enqueue_assets');
+
+/**
+ * Flag large displays / Smart TVs before CSS applies.
+ */
+function tlk_dash_large_display_head() {
+    if (!is_page_template('templates/page-template.php')) {
+        return;
+    }
+    ?>
+    <script>
+    (function () {
+      var ua = navigator.userAgent || '';
+      var isTv = /Tizen|Web0S|WebOS|SmartTV|SMART-TV|SmartHub|SamsungBrowser\/[.0-9]+.*TV|HbbTV|NetCast|Viera|AFT|AppleTV|GoogleTV|BRAVIA/i.test(ua);
+      var wide = Math.max(
+        screen.width || 0,
+        screen.height || 0,
+        window.innerWidth || 0,
+        window.innerHeight || 0
+      ) >= 900;
+
+      if (isTv || wide) {
+        document.documentElement.classList.add('tlk-large-display');
+      }
+    })();
+    </script>
+    <?php
+}
+add_action('wp_head', 'tlk_dash_large_display_head', 1);
 
 /**
  * Add page template(s)

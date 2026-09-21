@@ -50,7 +50,7 @@ body:not(.logged-in).tlk-prod-dash .site-content {
 .recent-entries__header h2 {
   margin: 0 0 0.35rem;
   font-size: var(--tlk-title);
-  line-height: 1.0;
+  line-height: 1;
   font-weight: 700;
   color: var(--tlk-black);
 }
@@ -617,23 +617,30 @@ body:not(.logged-in).tlk-prod-dash .site-content {
 }
 
 /* =========================================================
-   Responsive
-   ========================================================== */
-
-@media (max-width: 1024px) {
-
+   Responsive (phones only — do not use hover/pointer as TV matches those)
+   ========================================================= */
+@media (max-width: 950px) {
   .tlk-production-grid,
   .tlk-order-grid {
     grid-template-columns: 1fr;
   }
 
+  .tlk-production-card,
+  .tlk-order-card {
+    min-height: 280px;
+  }
+}
+
+@media (max-width: 768px) {
   .dash-container {
     padding: 1rem;
   }
 
   .dash-container__department-row,
   .production-entry-row,
-  .dash-container__overview {
+  .dash-container__overview,
+  .tlk-production-grid,
+  .tlk-order-grid {
     grid-template-columns: 1fr;
   }
 
@@ -690,7 +697,6 @@ body:not(.logged-in).tlk-prod-dash .site-content {
     font-size: 64px;
   }
 
-  /* Primary buttons */
   .prod-entry-submit,
   .recent-entry__save,
   .production-add-row,
@@ -705,4 +711,103 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   .tlk-internal-tools__button {
     line-height: 25px;
   }
+}
+
+/* =========================================================
+   Large display / Smart TV override
+   Must come AFTER mobile rules. html class is set in <head>.
+   ========================================================= */
+html.tlk-large-display .dash-container,
+body.tlk-large-display .dash-container {
+  padding: 0;
+}
+
+html.tlk-large-display .dash-container__department-row,
+body.tlk-large-display .dash-container__department-row {
+  grid-template-columns: 1fr 1fr;
+}
+
+html.tlk-large-display .dash-container__overview,
+html.tlk-large-display .tlk-production-grid,
+html.tlk-large-display .tlk-order-grid,
+body.tlk-large-display .dash-container__overview,
+body.tlk-large-display .tlk-production-grid,
+body.tlk-large-display .tlk-order-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+html.tlk-large-display .production-entry-row,
+body.tlk-large-display .production-entry-row {
+  grid-template-columns: minmax(220px, 1fr) minmax(180px, 0.65fr) auto;
+}
+
+html.tlk-large-display .dash-container__form,
+html.tlk-large-display .dash-container__recent-entries,
+body.tlk-large-display .dash-container__form,
+body.tlk-large-display .dash-container__recent-entries {
+  padding: 28px 26px;
+  border-radius: 0;
+}
+
+html.tlk-large-display .recent-entry__form,
+body.tlk-large-display .recent-entry__form {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+}
+
+html.tlk-large-display .recent-entry__summary,
+html.tlk-large-display .recent-entry__main,
+html.tlk-large-display .recent-entry__meta,
+body.tlk-large-display .recent-entry__summary,
+body.tlk-large-display .recent-entry__main,
+body.tlk-large-display .recent-entry__meta {
+  flex-direction: row;
+  align-items: center;
+}
+
+html.tlk-large-display .tlk-production-card,
+html.tlk-large-display .tlk-order-card,
+body.tlk-large-display .tlk-production-card,
+body.tlk-large-display .tlk-order-card {
+  min-height: 280px;
+  padding: 28px 26px;
+}
+
+html.tlk-large-display .tlk-production-card__top h2,
+html.tlk-large-display .tlk-order-card h2,
+body.tlk-large-display .tlk-production-card__top h2,
+body.tlk-large-display .tlk-order-card h2 {
+  font-size: 32px;
+}
+
+html.tlk-large-display .tlk-production-card__number,
+html.tlk-large-display .tlk-order-card__number,
+body.tlk-large-display .tlk-production-card__number,
+body.tlk-large-display .tlk-order-card__number {
+  font-size: 80px;
+}
+
+html.tlk-large-display .prod-entry-submit,
+html.tlk-large-display .recent-entry__save,
+html.tlk-large-display .production-add-row,
+body.tlk-large-display .prod-entry-submit,
+body.tlk-large-display .recent-entry__save,
+body.tlk-large-display .production-add-row {
+  height: var(--tlk-btn-h);
+  line-height: var(--tlk-btn-h);
+}
+
+html.tlk-large-display .tlk-internal-tools,
+body.tlk-large-display .tlk-internal-tools {
+  gap: 0;
+}
+
+html.tlk-large-display .tlk-internal-tools__button,
+body.tlk-large-display .tlk-internal-tools__button {
+  height: 50px;
+  line-height: 52px;
+}
+
+html.tlk-large-display .tlk-stats-section,
+body.tlk-large-display .tlk-stats-section {
+  margin-bottom: 0;
 }
