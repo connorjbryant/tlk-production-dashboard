@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 1.6.8
+ * Version: 1.6.9
  * Author: Connor Bryant
  * License: GPL-2.0+
  */
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 function tlk_dash_enqueue_assets(){
-    $version = '1.6.8';
+    $version = '1.6.9';
 
     wp_enqueue_style(
         'tlk_dash_styles',
@@ -35,11 +35,10 @@ add_action('wp_enqueue_scripts', 'tlk_dash_enqueue_assets');
 
 /**
  * Flag large displays / Smart TVs before CSS applies.
+ * Runs on every page (the class is harmless elsewhere) so we don't
+ * depend on is_page_template() matching, which is fragile.
  */
 function tlk_dash_large_display_head() {
-    if (!is_page_template('templates/page-template.php')) {
-        return;
-    }
     ?>
     <script>
     (function () {
@@ -54,12 +53,32 @@ function tlk_dash_large_display_head() {
 
       if (isTv || wide) {
         document.documentElement.classList.add('tlk-large-display');
+        if (document.body) {
+          document.body.classList.add('tlk-large-display');
+        } else {
+          document.addEventListener('DOMContentLoaded', function () {
+            document.body.classList.add('tlk-large-display');
+          });
+        }
       }
     })();
     </script>
     <?php
 }
 add_action('wp_head', 'tlk_dash_large_display_head', 1);
+
+/**
+ * Force a desktop-class viewport so Smart TV browsers don't
+ * report a tiny CSS viewport and trigger mobile breakpoints.
+ * Only output on the dashboard template to avoid affecting other pages.
+ */
+function tlk_dash_viewport_meta() {
+    if (!is_page_template('templates/page-template.php')) {
+        return;
+    }
+    echo '<meta name="viewport" content="width=1280, initial-scale=1">' . "\n";
+}
+add_action('wp_head', 'tlk_dash_viewport_meta', 0);
 
 /**
  * Add page template(s)
