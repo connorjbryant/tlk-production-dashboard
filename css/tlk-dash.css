@@ -276,7 +276,7 @@ body:not(.logged-in).tlk-prod-dash .site-content {
 .tlk-internal-tools__button {
   display: inline-block;
   min-width: 160px;
-  height: var(--tlk-btn-h);
+  height: fit-content;
   padding: 0 20px;
   border: 0;
   border-radius: var(--tlk-radius-sm);
@@ -294,7 +294,7 @@ body:not(.logged-in).tlk-prod-dash .site-content {
 
 .tlk-internal-tools__button {
   min-width: 170px;
-  height: 50px;
+  height: fit-content;
   line-height: 52px;
   border-radius: 3px;
   color: #fff !important;
@@ -835,6 +835,10 @@ body.tlk-prod-dash .tlk-internal-tools {
   flex-direction: row !important;
   flex-wrap: nowrap !important;
   align-items: center !important;
+}
+
+body.tlk-prod-dash .tlk-internal-tools {
+  gap: 1rem;
 }
 
 body.tlk-prod-dash .tlk-production-card,
