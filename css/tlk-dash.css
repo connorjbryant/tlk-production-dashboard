@@ -65,6 +65,18 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   padding-bottom: 0 !important;
 }
 
+.tlk-prod-dash.header-v1 .site-menu-wrapper {
+  max-width: none;
+}
+
+.tlk-prod-dash.header-v1 .main-nav ul.menu {
+  padding-left: 0;
+}
+
+.tlk-prod-dash.header-v1 .site-content {
+  padding-bottom: 0px;
+}
+
 /* ---------------------------------------------------------
    Main container
    --------------------------------------------------------- */
