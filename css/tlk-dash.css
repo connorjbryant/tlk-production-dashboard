@@ -823,8 +823,15 @@ body.tlk-prod-dash .recent-entry__save {
   align-self: flex-end !important;
 }
 
+body.tlk-prod-dash .recent-entry__field {
+  flex: 1 1 0 !important;
+  min-width: 180px !important;
+}
+
 body.tlk-prod-dash .recent-entry__updated {
-  flex: 0 0 100% !important;
+  flex: 0 0 auto !important;
+  align-self: center !important;
+  white-space: nowrap !important;
 }
 
 body.tlk-prod-dash .recent-entry__summary,

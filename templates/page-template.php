@@ -273,7 +273,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                                     'tlk_edit_production_nonce'
                                 ); ?>
 
-                                <div>
+                                <div class="recent-entry__field">
                                     <label for="edit-department-<?php echo esc_attr($entry['id']); ?>">
                                         Department
                                     </label>
@@ -282,13 +282,13 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                                         name="department"
                                         required
                                     >
-                                        <option value="cnc" <?php selected($entry['department'], 'cnc'); ?>>CNC</option>
-                                        <option value="pour" <?php selected($entry['department'], 'pour'); ?>>Pouring</option>
-                                        <option value="Build" <?php selected($entry['department'], 'Build'); ?>>Build</option>
+                                        <option value="CNC" <?php selected($entry['department'], 'CNC'); ?>>CNC</option>
+                                        <option value="Pouring" <?php selected($entry['department'], 'Pouring'); ?>>Pouring</option>
+                                        <option value="Building" <?php selected($entry['department'], 'Building'); ?>>Building</option>
                                     </select>
                                 </div>
 
-                                <div>
+                                <div class="recent-entry__field">
                                     <label for="edit-employee-<?php echo esc_attr($entry['id']); ?>">
                                         Employee
                                     </label>
@@ -301,7 +301,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                                     >
                                 </div>
 
-                                <div>
+                                <div class="recent-entry__field">
                                     <label for="edit-qty-<?php echo esc_attr($entry['id']); ?>">
                                         Quantity
                                     </label>

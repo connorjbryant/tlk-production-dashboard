@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 1.8.8
+ * Version: 1.8.9
  * Author: Connor Bryant
  * License: GPL-2.0+
  */
@@ -24,7 +24,7 @@ function tlk_dash_enqueue_assets(){
         return;
     }
 
-    $version = '1.8.8';
+    $version = '1.8.9';
 
     wp_enqueue_style(
         'tlk_dash_styles',
@@ -459,6 +459,41 @@ function tlk_production_table_exists() {
 }
 
 /**
+ * Repair department values written by older recent-entry edit forms.
+ *
+ * Older versions saved cnc / pour / Build instead of the canonical values
+ * CNC / Pouring / Building. That caused edited rows to stop matching the
+ * department totals. Run this migration once per site.
+ */
+function tlk_normalize_legacy_department_values() {
+    if (get_option('tlk_department_value_migration_189') === 'done') {
+        return;
+    }
+
+    global $wpdb;
+
+    if (!tlk_production_table_exists()) {
+        return;
+    }
+
+    $table_name = $wpdb->prefix . 'tlk_production';
+
+    $wpdb->query(
+        "UPDATE {$table_name}
+         SET department = CASE
+             WHEN LOWER(TRIM(department)) = 'cnc' THEN 'CNC'
+             WHEN LOWER(TRIM(department)) IN ('pour', 'pouring') THEN 'Pouring'
+             WHEN LOWER(TRIM(department)) IN ('build', 'building') THEN 'Building'
+             ELSE department
+         END
+         WHERE LOWER(TRIM(department)) IN ('cnc', 'pour', 'pouring', 'build', 'building')"
+    );
+
+    update_option('tlk_department_value_migration_189', 'done', false);
+}
+add_action('init', 'tlk_normalize_legacy_department_values', 20);
+
+/**
  * TLK production table form submissions
  */
 function handle_production_form_submission() {
@@ -631,6 +666,25 @@ function tlk_handle_production_entry_update() {
     $department = isset($_POST['department'])
         ? sanitize_text_field(wp_unslash($_POST['department']))
         : '';
+
+    // Recent-entry edits must use the same canonical department values as
+    // the main production-entry form and the reporting queries.
+    $department_aliases = array(
+        'cnc'      => 'CNC',
+        'pour'     => 'Pouring',
+        'pouring'  => 'Pouring',
+        'build'    => 'Building',
+        'building' => 'Building',
+    );
+    $department_key = strtolower(trim($department));
+    $department = isset($department_aliases[$department_key])
+        ? $department_aliases[$department_key]
+        : $department;
+
+    $allowed_departments = array('CNC', 'Pouring', 'Building');
+    if (!in_array($department, $allowed_departments, true)) {
+        wp_die('Invalid department.');
+    }
 
     $employee = isset($_POST['employee'])
         ? sanitize_text_field(wp_unslash($_POST['employee']))
