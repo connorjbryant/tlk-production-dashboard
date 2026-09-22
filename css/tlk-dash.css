@@ -270,7 +270,6 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   overflow-x: auto;
 }
 
-.prod-entry-submit,
 .recent-entry__save,
 .production-add-row,
 .tlk-internal-tools__button {
@@ -288,6 +287,25 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   line-height: var(--tlk-btn-h);
   text-align: center;
   text-transform: capitalize;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.prod-entry-submit {
+  display: inline-block;
+  min-width: 160px;
+  height: fit-content;
+  padding: 0 20px;
+  border: 0;
+  border-radius: var(--tlk-radius-sm);
+  background-color: var(--tlk-good);
+  box-shadow: none;
+  color: #fff;
+  font-weight: 500;
+  font-size: 22px;
+  line-height: var(--tlk-btn-h);
+  text-align: center;
+  text-transform: none;
   cursor: pointer;
   transition: 0.3s;
 }

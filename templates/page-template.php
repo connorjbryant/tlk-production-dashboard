@@ -148,7 +148,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
             </div>
 
             <button type="button" class="production-add-row" id="production-add-row">+ Add Another Person</button>
-            <input type="submit" class="prod-entry-submit" value="Save All Entries">
+            <input type="submit" class="prod-entry-submit" value="Save Submission(s)">
         </form>
 
         <template id="production-entry-template">
