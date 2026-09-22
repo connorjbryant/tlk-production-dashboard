@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 1.9.3
+ * Version: 2.0.0
  * Author: Connor Bryant
  * License: GPL-2.0+
  */
@@ -24,7 +24,7 @@ function tlk_dash_enqueue_assets(){
         return;
     }
 
-    $version = '1.9.3';
+    $version = '2.0.0';
 
     wp_enqueue_style(
         'tlk_dash_styles',
@@ -1664,43 +1664,70 @@ add_filter(
 );
 
 /**
- * Get the average monthly production per employee for a department.
- *
- * Each employee's entries for the current month are totaled first.
- * Those employee totals are then averaged together.
+ * Count Monday-Friday weekdays in an inclusive date range.
  */
-function tlk_department_quota($department) {
+function tlk_count_weekdays($start_date, $end_date) {
+    $tz = wp_timezone();
+    $start = new DateTimeImmutable($start_date, $tz);
+    $end = new DateTimeImmutable($end_date, $tz);
+    if ($start > $end) return 0;
+
+    $count = 0;
+    for ($day = $start; $day <= $end; $day = $day->modify('+1 day')) {
+        if ((int) $day->format('N') <= 5) $count++;
+    }
+    return $count;
+}
+
+/**
+ * Frontend production metric for the current month.
+ *
+ * 1. Sum multiple entries for the same employee on the same day.
+ * 2. Ignore Saturday/Sunday entries.
+ * 3. Average those employee/day totals across all recorded weekday output.
+ *
+ * Example: Joe 60 + Bob 50 on Monday = 55 for that day's employee average.
+ * If Tuesday's employee average is 65, the month-to-date average is 60.
+ */
+function tlk_get_department_daily_average($department, $year = null, $month = null) {
     global $wpdb;
 
-    $target_num = tlk_get_department_target($department);
+    $year  = $year ?: (int) wp_date('Y');
+    $month = $month ?: (int) wp_date('n');
     $table_name = $wpdb->prefix . 'tlk_production';
 
-    $current_year  = (int) wp_date('Y');
-    $current_month = (int) wp_date('n');
-
-    $employee_totals = $wpdb->get_col(
+    $employee_day_totals = $wpdb->get_col(
         $wpdb->prepare(
-            "SELECT SUM(qty) AS employee_total
+            "SELECT SUM(CAST(qty AS DECIMAL(10,2))) AS employee_day_total
              FROM {$table_name}
              WHERE department = %s
                AND YEAR(entry_date) = %d
                AND MONTH(entry_date) = %d
-             GROUP BY employee",
+               AND WEEKDAY(entry_date) BETWEEN 0 AND 4
+               AND employee IS NOT NULL
+               AND employee != ''
+             GROUP BY DATE(entry_date), employee",
             $department,
-            $current_year,
-            $current_month
+            $year,
+            $month
         )
     );
 
-    if (empty($employee_totals)) {
-        $average = 0;
-    } else {
-        $average = array_sum(array_map('intval', $employee_totals)) / count($employee_totals);
+    if (empty($employee_day_totals)) {
+        return 0;
     }
+
+    $employee_day_totals = array_map('floatval', $employee_day_totals);
+    return array_sum($employee_day_totals) / count($employee_day_totals);
+}
+
+function tlk_department_quota($department) {
+    $daily_target = tlk_get_department_target($department);
+    $average = tlk_get_department_daily_average($department);
 
     return array(
         'total' => $average,
-        'met'   => $average >= $target_num,
+        'met'   => $daily_target > 0 && $average >= $daily_target,
     );
 }
 
@@ -1719,7 +1746,7 @@ function building_quota() {
     return tlk_department_quota('Building');
 }
 /**
- * Department-level monthly targets used by the frontend average-parts metric.
+ * Department-level DAILY targets used by the frontend average-parts metric.
  * Stored in wp_options so they can be edited without changing PHP.
  */
 function tlk_get_department_targets() {
@@ -1771,7 +1798,7 @@ add_action('admin_post_tlk_save_department_targets', 'tlk_save_department_target
 
 /**
  * Individual employee production targets + private performance reporting.
- * Targets are monthly and are used only to calculate department goal attainment.
+ * Individual employee DAILY production targets + private performance reporting.
  */
 function tlk_create_employee_targets_table() {
     global $wpdb;
@@ -1781,7 +1808,7 @@ function tlk_create_employee_targets_table() {
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
         employee VARCHAR(100) NOT NULL,
         department VARCHAR(50) NOT NULL,
-        monthly_target DECIMAL(10,2) NOT NULL DEFAULT 60,
+        daily_target DECIMAL(10,2) NOT NULL DEFAULT 60,
         updated_at DATETIME NOT NULL,
         PRIMARY KEY (id),
         UNIQUE KEY employee_department (employee, department)
@@ -1792,9 +1819,9 @@ function tlk_create_employee_targets_table() {
 register_activation_hook(__FILE__, 'tlk_create_employee_targets_table');
 
 function tlk_maybe_upgrade_employee_targets_table() {
-    if (get_option('tlk_employee_targets_db_version') === '1.0.0') return;
+    if (get_option('tlk_employee_targets_db_version') === '1.1.0') return;
     tlk_create_employee_targets_table();
-    update_option('tlk_employee_targets_db_version', '1.0.0');
+    update_option('tlk_employee_targets_db_version', '1.1.0');
 }
 add_action('init', 'tlk_maybe_upgrade_employee_targets_table', 6);
 
@@ -1815,7 +1842,7 @@ function tlk_get_employee_target($employee, $department, $default = 60) {
     global $wpdb;
     $table = $wpdb->prefix . 'tlk_employee_targets';
     $target = $wpdb->get_var($wpdb->prepare(
-        "SELECT monthly_target FROM {$table} WHERE employee = %s AND department = %s LIMIT 1",
+        "SELECT daily_target FROM {$table} WHERE employee = %s AND department = %s LIMIT 1",
         $employee, $department
     ));
     return $target !== null ? (float) $target : (float) $default;
@@ -1845,18 +1872,16 @@ function tlk_get_employee_performance($department, $year, $month) {
 function tlk_get_department_performance($department, $year = null, $month = null) {
     $year = $year ?: (int) wp_date('Y');
     $month = $month ?: (int) wp_date('n');
-    $rows = tlk_get_employee_performance($department, $year, $month);
-    if (!$rows) return array('average_parts' => 0, 'percent' => 0, 'met' => false, 'employee_count' => 0);
 
-    $produced = array_sum(array_column($rows, 'produced'));
-    $percent_sum = array_sum(array_column($rows, 'percent'));
-    $count = count($rows);
-    $percent = $percent_sum / $count;
+    $average = tlk_get_department_daily_average($department, $year, $month);
+    $daily_target = tlk_get_department_target($department);
+    $percent = $daily_target > 0 ? ($average / $daily_target) * 100 : 0;
+
     return array(
-        'average_parts' => $produced / $count,
+        'average_parts' => $average,
         'percent' => $percent,
-        'met' => $percent >= 100,
-        'employee_count' => $count,
+        'met' => $daily_target > 0 && $average >= $daily_target,
+        'employee_count' => 0,
     );
 }
 
@@ -1883,7 +1908,7 @@ function tlk_save_employee_targets() {
         $wpdb->replace($table, array(
             'employee' => sanitize_text_field($employee),
             'department' => sanitize_text_field($department),
-            'monthly_target' => $target,
+            'daily_target' => $target,
             'updated_at' => current_time('mysql'),
         ), array('%s','%s','%f','%s'));
     }
@@ -1892,29 +1917,140 @@ function tlk_save_employee_targets() {
 }
 add_action('admin_post_tlk_save_employee_targets', 'tlk_save_employee_targets');
 
+function tlk_get_employee_performance_range($department, $start_date, $end_date) {
+    global $wpdb;
+    $production = $wpdb->prefix . 'tlk_production';
+    $start = $start_date . ' 00:00:00';
+    $end   = $end_date . ' 23:59:59';
+
+    $rows = $wpdb->get_results($wpdb->prepare(
+        "SELECT employee,
+                SUM(CAST(qty AS DECIMAL(10,2))) AS produced,
+                COUNT(DISTINCT DATE(entry_date)) AS active_days
+         FROM {$production}
+         WHERE department = %s
+           AND entry_date BETWEEN %s AND %s
+           AND employee IS NOT NULL AND employee != ''
+         GROUP BY employee
+         ORDER BY employee ASC",
+        $department, $start, $end
+    ), ARRAY_A);
+
+    foreach ($rows as &$row) {
+        $row['produced'] = (float) $row['produced'];
+        $row['active_days'] = (int) $row['active_days'];
+        $row['daily_average'] = $row['active_days'] > 0 ? $row['produced'] / $row['active_days'] : 0;
+        $row['target'] = tlk_get_employee_target($row['employee'], $department, 60);
+        $row['workdays'] = tlk_count_weekdays($start_date, $end_date);
+        $row['expected'] = $row['target'] * $row['workdays'];
+        $row['percent'] = $row['expected'] > 0 ? ($row['produced'] / $row['expected']) * 100 : 0;
+    }
+    unset($row);
+    return $rows;
+}
+
+function tlk_get_production_daily_breakdown($department, $start_date, $end_date) {
+    global $wpdb;
+    $production = $wpdb->prefix . 'tlk_production';
+    return $wpdb->get_results($wpdb->prepare(
+        "SELECT DATE(entry_date) AS production_date, employee,
+                SUM(CAST(qty AS DECIMAL(10,2))) AS produced
+         FROM {$production}
+         WHERE department = %s
+           AND entry_date BETWEEN %s AND %s
+           AND employee IS NOT NULL AND employee != ''
+         GROUP BY DATE(entry_date), employee
+         ORDER BY production_date DESC, employee ASC",
+        $department, $start_date . ' 00:00:00', $end_date . ' 23:59:59'
+    ), ARRAY_A);
+}
+
+function tlk_get_production_weekly_breakdown($department, $start_date, $end_date) {
+    global $wpdb;
+    $production = $wpdb->prefix . 'tlk_production';
+    return $wpdb->get_results($wpdb->prepare(
+        "SELECT YEARWEEK(entry_date, 1) AS year_week,
+                DATE_SUB(DATE(entry_date), INTERVAL WEEKDAY(entry_date) DAY) AS week_start,
+                employee,
+                SUM(CAST(qty AS DECIMAL(10,2))) AS produced
+         FROM {$production}
+         WHERE department = %s
+           AND entry_date BETWEEN %s AND %s
+           AND employee IS NOT NULL AND employee != ''
+         GROUP BY YEARWEEK(entry_date, 1), week_start, employee
+         ORDER BY week_start DESC, employee ASC",
+        $department, $start_date . ' 00:00:00', $end_date . ' 23:59:59'
+    ), ARRAY_A);
+}
+
+function tlk_employee_performance_period() {
+    $today = wp_date('Y-m-d');
+    $preset = isset($_GET['range']) ? sanitize_key(wp_unslash($_GET['range'])) : 'this_month';
+    $tz = wp_timezone();
+    $now = new DateTimeImmutable('now', $tz);
+
+    switch ($preset) {
+        case 'today':
+            $start = $end = $today;
+            $label = 'Today';
+            break;
+        case 'this_week':
+            $start = $now->modify('monday this week')->format('Y-m-d');
+            $end = $today;
+            $label = 'This Week';
+            break;
+        case 'last_week':
+            $start = $now->modify('monday last week')->format('Y-m-d');
+            $end = $now->modify('sunday last week')->format('Y-m-d');
+            $label = 'Last Week';
+            break;
+        case 'last_month':
+            $first_last = $now->modify('first day of last month');
+            $start = $first_last->format('Y-m-d');
+            $end = $first_last->modify('last day of this month')->format('Y-m-d');
+            $label = $first_last->format('F Y');
+            break;
+        case 'custom':
+            $start = isset($_GET['start_date']) ? sanitize_text_field(wp_unslash($_GET['start_date'])) : $today;
+            $end = isset($_GET['end_date']) ? sanitize_text_field(wp_unslash($_GET['end_date'])) : $today;
+            if (!preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $start)) $start = $today;
+            if (!preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $end)) $end = $today;
+            if ($start > $end) { $tmp = $start; $start = $end; $end = $tmp; }
+            $label = wp_date('M j, Y', strtotime($start)) . ' – ' . wp_date('M j, Y', strtotime($end));
+            break;
+        case 'this_month':
+        default:
+            $preset = 'this_month';
+            $start = $now->modify('first day of this month')->format('Y-m-d');
+            $end = $today;
+            $label = $now->format('F Y') . ' to date';
+            break;
+    }
+
+    return array('preset'=>$preset, 'start'=>$start, 'end'=>$end, 'label'=>$label);
+}
+
 function tlk_render_employee_performance_page() {
     if (!tlk_can_manage_employee_performance()) wp_die('You are not allowed to view employee performance.');
-    $year = isset($_GET['year']) ? max(2020, absint($_GET['year'])) : (int) wp_date('Y');
-    $month = isset($_GET['month']) ? min(12, max(1, absint($_GET['month']))) : (int) wp_date('n');
     $departments = array('CNC','Pouring','Building');
+    $period = tlk_employee_performance_period();
     ?>
     <div class="wrap">
         <h1>Employee Performance</h1>
-        <p>Private individual production detail. The public admin dashboard shows department-level results.</p>
-        <a href="/tlk-production-dashboard">Go To Dashboard Overview</a>
+        <p>Private production detail. The frontend dashboard averages each employee's recorded weekday output per day across the current month and compares that real daily average directly with the department daily goal.</p>
+        <p><a href="/tlk-production-dashboard">Go To Dashboard Overview</a></p>
         <?php if (isset($_GET['department_targets_saved'])) : ?><div class="notice notice-success is-dismissible"><p>Department targets saved.</p></div><?php endif; ?>
 
         <?php $department_targets = tlk_get_department_targets(); ?>
         <div class="card" style="max-width:900px;margin:18px 0;padding:18px 22px;">
             <h2 style="margin-top:0;">Department Targets</h2>
-            <p>Set a goal number of parts people should make on average.</p>
+            <p>Enter the expected number of parts per person per weekday (Monday–Friday). The frontend compares the month-to-date average parts produced per person per recorded weekday directly with this daily goal.</p>
             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
                 <input type="hidden" name="action" value="tlk_save_department_targets">
                 <?php wp_nonce_field('tlk_save_department_targets'); ?>
                 <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end;">
-                    <?php foreach (array('CNC','Pouring','Building') as $target_department) : ?>
-                        <label>
-                            <strong><?php echo esc_html($target_department); ?></strong><br>
+                    <?php foreach ($departments as $target_department) : ?>
+                        <label><strong><?php echo esc_html($target_department); ?> Daily Goal</strong><br>
                             <input type="number" min="0" step="1" name="department_targets[<?php echo esc_attr($target_department); ?>]" value="<?php echo esc_attr($department_targets[$target_department]); ?>" style="width:120px;">
                         </label>
                     <?php endforeach; ?>
@@ -1922,37 +2058,93 @@ function tlk_render_employee_performance_page() {
                 </div>
             </form>
         </div>
+
         <?php if (isset($_GET['targets_saved'])) : ?><div class="notice notice-success is-dismissible"><p>Employee targets saved.</p></div><?php endif; ?>
-        <form method="get" style="margin:18px 0;display:flex;gap:8px;align-items:center;">
-            <input type="hidden" name="page" value="tlk-employee-performance">
-            <select name="month"><?php for ($m=1;$m<=12;$m++): ?><option value="<?php echo $m; ?>" <?php selected($month,$m); ?>><?php echo esc_html(wp_date('F', mktime(0,0,0,$m,1))); ?></option><?php endfor; ?></select>
-            <input type="number" name="year" value="<?php echo esc_attr($year); ?>" min="2020" max="2100">
-            <button class="button">View</button>
-        </form>
+
+        <div class="card" style="max-width:1100px;margin:18px 0;padding:18px 22px;">
+            <h2 style="margin-top:0;">Reporting Range</h2>
+            <form method="get" id="tlk-performance-range" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+                <input type="hidden" name="page" value="tlk-employee-performance">
+                <label><strong>Range</strong><br>
+                    <select name="range" id="tlk-range-select">
+                        <?php foreach (array('today'=>'Today','this_week'=>'This Week','last_week'=>'Last Week','this_month'=>'This Month','last_month'=>'Last Month','custom'=>'Custom Range') as $value=>$text) : ?>
+                            <option value="<?php echo esc_attr($value); ?>" <?php selected($period['preset'], $value); ?>><?php echo esc_html($text); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+                <label class="tlk-custom-date"><strong>Start</strong><br><input type="date" name="start_date" value="<?php echo esc_attr($period['start']); ?>"></label>
+                <label class="tlk-custom-date"><strong>End</strong><br><input type="date" name="end_date" value="<?php echo esc_attr($period['end']); ?>"></label>
+                <button class="button button-primary">View</button>
+            </form>
+            <p style="margin-bottom:0;"><strong>Showing:</strong> <?php echo esc_html($period['label']); ?></p>
+        </div>
+
         <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
             <input type="hidden" name="action" value="tlk_save_employee_targets">
             <?php wp_nonce_field('tlk_save_employee_targets'); ?>
             <?php foreach ($departments as $department):
-                $rows = tlk_get_employee_performance($department, $year, $month);
-                $dept = tlk_get_department_performance($department, $year, $month); ?>
-                <h2 style="margin-top:28px;"><?php echo esc_html($department); ?> <small style="font-weight:400;">— <?php echo esc_html(number_format_i18n($dept['percent'],1)); ?>% goal attainment</small></h2>
+                $rows = tlk_get_employee_performance_range($department, $period['start'], $period['end']);
+                $daily = tlk_get_production_daily_breakdown($department, $period['start'], $period['end']);
+                $weekly = tlk_get_production_weekly_breakdown($department, $period['start'], $period['end']);
+                $dept_total = array_sum(array_column($rows, 'produced'));
+                $dept_avg = count($rows) ? $dept_total / count($rows) : 0;
+                ?>
+                <h2 style="margin-top:32px;"><?php echo esc_html($department); ?></h2>
+                <p><strong><?php echo esc_html(number_format_i18n($dept_total)); ?></strong> total parts &nbsp;|&nbsp; <strong><?php echo esc_html(number_format_i18n($dept_avg, 1)); ?></strong> average parts per person for this range</p>
                 <?php if (!$rows): ?><p>No production entries for this department in this period.</p><?php else: ?>
-                <table class="widefat striped" style="max-width:900px;">
-                    <thead><tr><th>Employee</th><th>Produced</th><th>Expected</th><th>Goal %</th></tr></thead>
-                    <tbody><?php foreach ($rows as $row):
-                        $key = base64_encode($department . '|' . $row['employee']); ?>
+                <table class="widefat striped" style="max-width:1100px;">
+                    <thead><tr><th>Employee</th><th>Range Total</th><th>Weekdays in Range</th><th>Days With Output</th><th>Avg / Active Day</th><th>Daily Goal</th><th>Expected for Range</th><th>% of Goal</th></tr></thead>
+                    <tbody><?php foreach ($rows as $row): $key = base64_encode($department . '|' . $row['employee']); ?>
                         <tr>
                             <td><strong><?php echo esc_html($row['employee']); ?></strong></td>
                             <td><?php echo esc_html(number_format_i18n($row['produced'])); ?></td>
+                            <td><?php echo esc_html(number_format_i18n($row['workdays'])); ?></td>
+                            <td><?php echo esc_html(number_format_i18n($row['active_days'])); ?></td>
+                            <td><?php echo esc_html(number_format_i18n($row['daily_average'], 1)); ?></td>
                             <td><input type="number" min="0" step="1" name="targets[<?php echo esc_attr($key); ?>]" value="<?php echo esc_attr($row['target']); ?>" style="width:100px;"></td>
-                            <td><?php echo esc_html(number_format_i18n($row['percent'],1)); ?>%</td>
+                            <td><?php echo esc_html(number_format_i18n($row['expected'])); ?></td>
+                            <td><?php echo esc_html(number_format_i18n($row['percent'], 1)); ?>%</td>
                         </tr>
                     <?php endforeach; ?></tbody>
                 </table>
+
+                <details style="max-width:1100px;margin-top:14px;">
+                    <summary style="cursor:pointer;font-weight:600;">Weekly Output</summary>
+                    <table class="widefat striped" style="margin-top:10px;">
+                        <thead><tr><th>Week Starting</th><th>Employee</th><th>Produced</th></tr></thead>
+                        <tbody><?php foreach ($weekly as $item): ?><tr>
+                            <td><?php echo esc_html(wp_date('M j, Y', strtotime($item['week_start']))); ?></td>
+                            <td><?php echo esc_html($item['employee']); ?></td>
+                            <td><?php echo esc_html(number_format_i18n((float)$item['produced'])); ?></td>
+                        </tr><?php endforeach; ?></tbody>
+                    </table>
+                </details>
+
+                <details style="max-width:1100px;margin-top:10px;">
+                    <summary style="cursor:pointer;font-weight:600;">Daily Output</summary>
+                    <table class="widefat striped" style="margin-top:10px;">
+                        <thead><tr><th>Date</th><th>Employee</th><th>Produced</th></tr></thead>
+                        <tbody><?php foreach ($daily as $item): ?><tr>
+                            <td><?php echo esc_html(wp_date('D, M j, Y', strtotime($item['production_date']))); ?></td>
+                            <td><?php echo esc_html($item['employee']); ?></td>
+                            <td><?php echo esc_html(number_format_i18n((float)$item['produced'])); ?></td>
+                        </tr><?php endforeach; ?></tbody>
+                    </table>
+                </details>
                 <?php endif; ?>
             <?php endforeach; ?>
-            <p><button type="submit" class="button button-primary">Save Expected Production</button></p>
+            <p><button type="submit" class="button button-primary">Save Daily Goals</button></p>
         </form>
     </div>
+    <script>
+    (function(){
+        var select = document.getElementById('tlk-range-select');
+        var custom = document.querySelectorAll('.tlk-custom-date');
+        function toggleCustom(){
+            for (var i=0;i<custom.length;i++) custom[i].style.display = select.value === 'custom' ? 'block' : 'none';
+        }
+        if (select) { select.addEventListener('change', toggleCustom); toggleCustom(); }
+    })();
+    </script>
     <?php
 }
