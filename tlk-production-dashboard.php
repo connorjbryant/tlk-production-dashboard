@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 2.0.4
+ * Version: 2.0.5
  * Author: Connor Bryant
  * License: GPL-2.0+
  */
@@ -24,7 +24,7 @@ function tlk_dash_enqueue_assets(){
         return;
     }
 
-    $version = '2.0.4';
+    $version = '2.0.5';
 
     wp_enqueue_style(
         'tlk_dash_styles',
@@ -931,75 +931,180 @@ function tlk_schedule_notification_format_po_rows($rows) {
 }
 
 /**
- * Send an email only when the schedule itself changed.
+ * Store one successful schedule sync in today's digest log.
+ * Individual success/change emails are intentionally not sent here.
  */
-function tlk_send_schedule_change_email($changes, $sync_time) {
-    $added_count   = count($changes['added']);
-    $removed_count = count($changes['removed']);
-    $changed_count = count($changes['changed']);
+function tlk_log_schedule_sync_for_daily_digest($inserted, $changes, $sync_time) {
+    $date_key = wp_date('Y-m-d');
+    $option_key = 'tlk_schedule_digest_' . $date_key;
+    $log = get_option($option_key, array());
 
-    if (($added_count + $removed_count + $changed_count) === 0) {
-        return;
+    if (!is_array($log)) {
+        $log = array();
     }
 
-    $subject = sprintf(
-        'TLK Schedule Changes Detected - %d Added, %d Removed, %d Changed',
-        $added_count,
-        $removed_count,
-        $changed_count
+    $log[] = array(
+        'time'     => (string) $sync_time,
+        'rows'     => absint($inserted),
+        'added'    => count($changes['added']),
+        'removed'  => count($changes['removed']),
+        'changed'  => count($changes['changed']),
+        'changes'  => $changes,
     );
 
-    $message = "TLK schedule changes were detected during the sync at {$sync_time}.\n\n";
+    update_option($option_key, $log, false);
+}
 
-    if ($added_count > 0) {
-        $message .= "NEW PO(S)\n";
-        $message .= "---------\n";
-        foreach ($changes['added'] as $po => $rows) {
-            $message .= "PO {$po}\n";
-            $message .= tlk_schedule_notification_format_po_rows($rows) . "\n\n";
-        }
-    }
-
-    if ($removed_count > 0) {
-        $message .= "REMOVED / NO LONGER ON SCHEDULE\n";
-        $message .= "-------------------------------\n";
-        foreach ($changes['removed'] as $po => $rows) {
-            $message .= "PO {$po}\n";
-            $message .= tlk_schedule_notification_format_po_rows($rows) . "\n\n";
-        }
-    }
-
-    if ($changed_count > 0) {
-        $message .= "CHANGED PO(S)\n";
-        $message .= "-------------\n";
-        foreach ($changes['changed'] as $po => $change) {
-            $message .= "PO {$po}\n";
-            $message .= "Before:\n";
-            $message .= tlk_schedule_notification_format_po_rows($change['old']) . "\n";
-            $message .= "After:\n";
-            $message .= tlk_schedule_notification_format_po_rows($change['new']) . "\n\n";
-        }
-    }
+/**
+ * Immediate email for a failed sync. Failures are intentionally not delayed
+ * until the daily digest because they may require attention right away.
+ */
+function tlk_send_schedule_sync_failure_email($error_message) {
+    $subject = 'TLK Schedule Sync FAILED';
+    $message = "The TLK schedule sync failed at " . wp_date('Y-m-d g:i A') . ".\n\n";
+    $message .= "Error:\n" . sanitize_textarea_field((string) $error_message) . "\n";
 
     wp_mail(tlk_schedule_notification_email(), $subject, $message);
 }
 
 /**
- * Send a confirmation after every successful schedule sync.
+ * Send one consolidated email containing every successful sync and every
+ * schedule change recorded for a calendar day.
  */
-function tlk_send_schedule_sync_success_email($inserted, $changes, $sync_time) {
-    $change_total = count($changes['added']) + count($changes['removed']) + count($changes['changed']);
+function tlk_send_schedule_daily_digest($date_key = '') {
+    if ($date_key === '') {
+        $date_key = wp_date('Y-m-d');
+    }
 
-    $subject = 'TLK Schedule Successfully Synced';
-    $message = "The TLK schedule successfully synced at {$sync_time}.\n\n";
-    $message .= 'Rows synced: ' . absint($inserted) . "\n";
-    $message .= 'New POs: ' . count($changes['added']) . "\n";
-    $message .= 'Removed POs: ' . count($changes['removed']) . "\n";
-    $message .= 'Changed POs: ' . count($changes['changed']) . "\n";
-    $message .= 'Schedule changes detected: ' . ($change_total > 0 ? 'Yes' : 'No') . "\n";
+    $option_key = 'tlk_schedule_digest_' . $date_key;
+    $log = get_option($option_key, array());
 
-    wp_mail(tlk_schedule_notification_email(), $subject, $message);
+    if (!is_array($log)) {
+        $log = array();
+    }
+
+    $timezone = wp_timezone();
+    $date = DateTimeImmutable::createFromFormat('!Y-m-d', $date_key, $timezone);
+    $pretty_date = $date ? $date->format('F j, Y') : $date_key;
+
+    $sync_count = count($log);
+    $added_total = 0;
+    $removed_total = 0;
+    $changed_total = 0;
+
+    foreach ($log as $entry) {
+        $added_total += absint($entry['added'] ?? 0);
+        $removed_total += absint($entry['removed'] ?? 0);
+        $changed_total += absint($entry['changed'] ?? 0);
+    }
+
+    $subject = 'TLK Schedule Daily Sync Summary - ' . $pretty_date;
+    $message = "TLK SCHEDULE DAILY SYNC SUMMARY\n";
+    $message .= $pretty_date . "\n\n";
+
+    $message .= "SUMMARY\n";
+    $message .= "-------\n";
+    $message .= 'Successful syncs: ' . $sync_count . "\n";
+    $message .= 'New POs: ' . $added_total . "\n";
+    $message .= 'Removed POs: ' . $removed_total . "\n";
+    $message .= 'Changed POs: ' . $changed_total . "\n\n";
+
+    $message .= "SYNC ACTIVITY\n";
+    $message .= "-------------\n";
+
+    if (!$log) {
+        $message .= "No successful schedule syncs were recorded for this day.\n";
+    } else {
+        foreach ($log as $entry) {
+            $change_count = absint($entry['added'] ?? 0) + absint($entry['removed'] ?? 0) + absint($entry['changed'] ?? 0);
+            $message .= sprintf(
+                "%s - %d rows - %s\n",
+                (string) ($entry['time'] ?? ''),
+                absint($entry['rows'] ?? 0),
+                $change_count > 0
+                    ? sprintf('%d added, %d removed, %d changed', absint($entry['added'] ?? 0), absint($entry['removed'] ?? 0), absint($entry['changed'] ?? 0))
+                    : 'No changes'
+            );
+        }
+    }
+
+    if (($added_total + $removed_total + $changed_total) > 0) {
+        $message .= "\nCHANGES\n";
+        $message .= "-------\n";
+
+        foreach ($log as $entry) {
+            $changes = isset($entry['changes']) && is_array($entry['changes']) ? $entry['changes'] : array();
+            $entry_change_count = absint($entry['added'] ?? 0) + absint($entry['removed'] ?? 0) + absint($entry['changed'] ?? 0);
+
+            if ($entry_change_count === 0) {
+                continue;
+            }
+
+            $message .= "\n" . (string) ($entry['time'] ?? '') . "\n";
+
+            foreach ((array) ($changes['added'] ?? array()) as $po => $rows) {
+                $message .= "ADDED PO {$po}\n";
+                $message .= tlk_schedule_notification_format_po_rows($rows) . "\n";
+            }
+
+            foreach ((array) ($changes['removed'] ?? array()) as $po => $rows) {
+                $message .= "REMOVED PO {$po}\n";
+                $message .= tlk_schedule_notification_format_po_rows($rows) . "\n";
+            }
+
+            foreach ((array) ($changes['changed'] ?? array()) as $po => $change) {
+                $message .= "CHANGED PO {$po}\n";
+                $message .= "Before:\n" . tlk_schedule_notification_format_po_rows($change['old'] ?? array()) . "\n";
+                $message .= "After:\n" . tlk_schedule_notification_format_po_rows($change['new'] ?? array()) . "\n";
+            }
+        }
+    } else {
+        $message .= "\nNo schedule changes were detected today.\n";
+    }
+
+    $sent = wp_mail(tlk_schedule_notification_email(), $subject, $message);
+
+    if ($sent) {
+        update_option('tlk_schedule_last_digest_sent', $date_key, false);
+        delete_option($option_key);
+    }
+
+    return $sent;
 }
+
+/**
+ * WP-Cron callback for the once-daily digest.
+ */
+function tlk_schedule_daily_digest_cron_callback() {
+    tlk_send_schedule_daily_digest(wp_date('Y-m-d'));
+}
+add_action('tlk_schedule_daily_digest_event', 'tlk_schedule_daily_digest_cron_callback');
+
+/**
+ * Schedule the digest for 5:00 PM in the WordPress site's timezone.
+ */
+function tlk_schedule_daily_digest_event() {
+    if (wp_next_scheduled('tlk_schedule_daily_digest_event')) {
+        return;
+    }
+
+    $timezone = wp_timezone();
+    $now = new DateTimeImmutable('now', $timezone);
+    $next = $now->setTime(17, 0, 0);
+
+    if ($next <= $now) {
+        $next = $next->modify('+1 day');
+    }
+
+    wp_schedule_event($next->getTimestamp(), 'daily', 'tlk_schedule_daily_digest_event');
+}
+add_action('init', 'tlk_schedule_daily_digest_event');
+register_activation_hook(__FILE__, 'tlk_schedule_daily_digest_event');
+
+function tlk_clear_schedule_daily_digest_event() {
+    wp_clear_scheduled_hook('tlk_schedule_daily_digest_event');
+}
+register_deactivation_hook(__FILE__, 'tlk_clear_schedule_daily_digest_event');
 
 /**
  * Sync Google spreadsheet to WordPress.
@@ -1222,10 +1327,9 @@ function tlk_sync_schedule_to_database() {
     update_option('tlk_schedule_last_successful_sync', $now, false);
     update_option('tlk_schedule_last_sync_row_count', $inserted, false);
 
-    // A change email is sent only when the schedule differs from the previous
-    // saved snapshot. A success email is sent after every completed sync.
-    tlk_send_schedule_change_email($schedule_changes, $now);
-    tlk_send_schedule_sync_success_email($inserted, $schedule_changes, $now);
+    // Keep successful hourly syncs quiet and add them to today's digest.
+    // One consolidated email is sent daily instead of one email per sync/change.
+    tlk_log_schedule_sync_for_daily_digest($inserted, $schedule_changes, $now);
 
     return $inserted;
 }
@@ -1595,6 +1699,7 @@ function tlk_handle_server_cron_sync() {
     $result = tlk_sync_schedule_to_database();
 
     if (is_wp_error($result)) {
+        tlk_send_schedule_sync_failure_email($result->get_error_message());
         status_header(500);
 
         exit(
