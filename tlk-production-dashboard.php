@@ -2319,7 +2319,7 @@ function tlk_render_employee_performance_page() {
                     Expected: <strong><?php echo esc_html(number_format_i18n($expected_total)); ?></strong>
                     (<?php echo esc_html(number_format_i18n($dept_goal)); ?>/day × <?php echo esc_html(number_format_i18n($counted_days)); ?> counted days)<br>
                     Period vs expected: <span class="<?php echo esc_attr($pct_class); ?>"><?php echo esc_html(number_format_i18n($pct_expected, 1)); ?>%</span><br>
-                    Avg / counted day: <strong><?php echo esc_html(number_format_i18n($dept_daily_avg, 1)); ?></strong>
+                    Avg / counted parts per day: <strong><?php echo esc_html(number_format_i18n($dept_daily_avg, 1)); ?></strong>
                     · Daily goal: <strong><?php echo esc_html(number_format_i18n($dept_goal)); ?></strong>
                 </p>
             </div>
