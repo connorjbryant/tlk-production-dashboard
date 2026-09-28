@@ -2390,7 +2390,7 @@ function tlk_render_employee_performance_page() {
             <?php endforeach; ?>
 
         <details id="tlk-counting-rules" class="card tlk-perf-settings" style="padding:18px 22px;">
-            <summary style="cursor:pointer;font-weight:600;">Department Targets &amp; Frontend Visibility</summary>
+            <summary style="cursor:pointer;font-weight:600;">Settings &amp; Counting Rules</summary>
             <p>Set each department's daily goal and choose whether its production statistics card is shown on the frontend. Hiding a department does not delete its production history or prevent new production entries.</p>
             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
                 <input type="hidden" name="action" value="tlk_save_department_targets">
