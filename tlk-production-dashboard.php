@@ -2272,7 +2272,7 @@ function tlk_render_employee_performance_page() {
     </style>
     <div class="wrap tlk-perf-wrap">
         <h1>Employee Performance</h1>
-        <p class="tlk-perf-lede">Period totals versus expected output (daily goal × counted production days). Monday–Thursday always count; Friday counts only when that department recorded production; weekends never count. <a href="#tlk-counting-rules">Counting rules</a></p>
+        <p class="tlk-perf-lede">Period totals versus expected output (daily goal × counted production days). Monday–Thursday always count; Friday counts only when that department recorded production; weekends never count. <a href="#tlk-counting-rules">View settings</a></p>
         <p><a href="/tlk-production-dashboard">Go To Dashboard Overview</a></p>
 
         <div class="card" style="margin:18px 0;padding:18px 22px;">
