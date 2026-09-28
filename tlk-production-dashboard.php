@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 2.0.6
+ * Version: 2.0.8
  * Author: Connor Bryant
  * License: GPL-2.0+
  */
@@ -24,7 +24,7 @@ function tlk_dash_enqueue_assets(){
         return;
     }
 
-    $version = '2.0.6';
+    $version = '2.0.8';
 
     wp_enqueue_style(
         'tlk_dash_styles',
@@ -2077,6 +2077,40 @@ function tlk_employee_performance_menu() {
 }
 add_action('admin_menu', 'tlk_employee_performance_menu');
 
+/**
+ * On this admin screen only: drop other plugins' notices so production
+ * numbers are the first thing on the page.
+ */
+function tlk_employee_performance_clean_admin_notices() {
+    remove_all_actions('admin_notices');
+    remove_all_actions('all_admin_notices');
+    remove_all_actions('network_admin_notices');
+    add_action('admin_notices', 'tlk_employee_performance_own_notices');
+}
+add_action('load-toplevel_page_tlk-employee-performance', 'tlk_employee_performance_clean_admin_notices');
+
+function tlk_employee_performance_own_notices() {
+    if (!isset($_GET['page']) || $_GET['page'] !== 'tlk-employee-performance') {
+        return;
+    }
+    if (isset($_GET['department_targets_saved'])) {
+        echo '<div class="notice notice-success is-dismissible"><p>Department targets saved.</p></div>';
+    }
+    if (isset($_GET['targets_saved'])) {
+        echo '<div class="notice notice-success is-dismissible"><p>Employee targets saved.</p></div>';
+    }
+}
+
+function tlk_performance_percent_class($percent) {
+    if ($percent >= 100) {
+        return 'tlk-perf-good';
+    }
+    if ($percent >= 80) {
+        return 'tlk-perf-ok';
+    }
+    return 'tlk-perf-low';
+}
+
 function tlk_save_employee_targets() {
     if (!tlk_can_manage_employee_performance()) wp_die('You are not allowed to manage employee targets.');
     check_admin_referer('tlk_save_employee_targets');
@@ -2217,19 +2251,146 @@ function tlk_render_employee_performance_page() {
     if (!tlk_can_manage_employee_performance()) wp_die('You are not allowed to view employee performance.');
     $departments = array('CNC','Pouring','Building');
     $period = tlk_employee_performance_period();
+    $department_targets = tlk_get_department_targets();
+    $visible_frontend_departments = tlk_get_visible_frontend_departments();
     ?>
-    <div class="wrap">
+    <style>
+        .tlk-perf-wrap { max-width: 1180px; }
+        .tlk-perf-lede { color: #50575e; max-width: 820px; }
+        .tlk-perf-cards { display: flex; gap: 14px; flex-wrap: wrap; margin: 18px 0 8px; }
+        .tlk-perf-card { background: #fff; border: 1px solid #c3c4c7; border-radius: 4px; padding: 14px 16px; min-width: 240px; flex: 1; box-shadow: 0 1px 1px rgba(0,0,0,.04); }
+        .tlk-perf-card h2 { margin: 0 0 10px; font-size: 15px; }
+        .tlk-perf-card .tlk-perf-total { font-size: 28px; line-height: 1.1; font-weight: 600; }
+        .tlk-perf-card .tlk-perf-total span { font-size: 13px; font-weight: 500; color: #646970; }
+        .tlk-perf-meta { margin: 8px 0 0; color: #50575e; font-size: 13px; }
+        .tlk-perf-good { color: #007017; font-weight: 600; }
+        .tlk-perf-ok { color: #9a6700; font-weight: 600; }
+        .tlk-perf-low { color: #b32d2e; font-weight: 600; }
+        .tlk-perf-section { margin-top: 28px; }
+        .tlk-perf-section table { width: 100%; }
+        .tlk-perf-settings { margin-top: 36px; }
+    </style>
+    <div class="wrap tlk-perf-wrap">
         <h1>Employee Performance</h1>
-        <p>Private production detail. The frontend dashboard totals everyone's output by department for each production day. Monday–Thursday always count; Friday counts only when that department actually records production; weekends never count. The resulting daily average is compared with the department daily goal.</p>
+        <p class="tlk-perf-lede">Period totals versus expected output (daily goal × counted production days). Monday–Thursday always count; Friday counts only when that department recorded production; weekends never count. <a href="#tlk-counting-rules">Counting rules</a></p>
         <p><a href="/tlk-production-dashboard">Go To Dashboard Overview</a></p>
-        <?php if (isset($_GET['department_targets_saved'])) : ?><div class="notice notice-success is-dismissible"><p>Department targets saved.</p></div><?php endif; ?>
 
+        <div class="card" style="margin:18px 0;padding:18px 22px;">
+            <h2 style="margin-top:0;">Reporting Range</h2>
+            <form method="get" id="tlk-performance-range" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+                <input type="hidden" name="page" value="tlk-employee-performance">
+                <label><strong>Range</strong><br>
+                    <select name="range" id="tlk-range-select">
+                        <?php foreach (array('today'=>'Today','this_week'=>'This Week','last_week'=>'Last Week','this_month'=>'This Month','last_month'=>'Last Month','custom'=>'Custom Range') as $value=>$text) : ?>
+                            <option value="<?php echo esc_attr($value); ?>" <?php selected($period['preset'], $value); ?>><?php echo esc_html($text); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+                <label class="tlk-custom-date"><strong>Start</strong><br><input type="date" name="start_date" value="<?php echo esc_attr($period['start']); ?>"></label>
+                <label class="tlk-custom-date"><strong>End</strong><br><input type="date" name="end_date" value="<?php echo esc_attr($period['end']); ?>"></label>
+                <button class="button button-primary">View</button>
+            </form>
+            <p style="margin-bottom:0;"><strong>Showing:</strong> <?php echo esc_html($period['label']); ?></p>
+        </div>
+
+        <div class="tlk-perf-cards">
         <?php
-        $department_targets = tlk_get_department_targets();
-        $visible_frontend_departments = tlk_get_visible_frontend_departments();
-        ?>
-        <div class="card" style="max-width:900px;margin:18px 0;padding:18px 22px;">
-            <h2 style="margin-top:0;">Department Targets &amp; Frontend Visibility</h2>
+        $department_summaries = array();
+        foreach ($departments as $department) {
+            $rows = tlk_get_employee_performance_range($department, $period['start'], $period['end']);
+            $daily = tlk_get_production_daily_breakdown($department, $period['start'], $period['end']);
+            $weekly = tlk_get_production_weekly_breakdown($department, $period['start'], $period['end']);
+            $department_days = tlk_get_department_daily_totals_range($department, $period['start'], $period['end']);
+            $dept_total = array_sum(array_map(function($item){ return (float) $item['produced']; }, $department_days));
+            $counted_days = tlk_count_production_days($department, $period['start'], $period['end']);
+            $recorded_days = count($department_days);
+            $dept_goal = tlk_get_department_target($department);
+            $expected_total = $dept_goal * $counted_days;
+            $dept_daily_avg = $counted_days ? $dept_total / $counted_days : 0;
+            $pct_expected = $expected_total > 0 ? ($dept_total / $expected_total) * 100 : 0;
+            $pct_daily = $dept_goal > 0 ? ($dept_daily_avg / $dept_goal) * 100 : 0;
+            $department_summaries[$department] = compact('rows','daily','weekly','department_days','dept_total','counted_days','recorded_days','dept_goal','expected_total','dept_daily_avg','pct_expected','pct_daily');
+            $pct_class = tlk_performance_percent_class($pct_expected);
+            ?>
+            <div class="tlk-perf-card">
+                <h2><?php echo esc_html($department); ?><?php if (!tlk_department_is_visible_on_frontend($department)) : ?> <span style="font-weight:400;color:#646970;">(hidden on frontend)</span><?php endif; ?></h2>
+                <div class="tlk-perf-total"><?php echo esc_html(number_format_i18n($dept_total)); ?> <span>parts this period</span></div>
+                <p class="tlk-perf-meta">
+                    Expected: <strong><?php echo esc_html(number_format_i18n($expected_total)); ?></strong>
+                    (<?php echo esc_html(number_format_i18n($dept_goal)); ?>/day × <?php echo esc_html(number_format_i18n($counted_days)); ?> counted days)<br>
+                    Period vs expected: <span class="<?php echo esc_attr($pct_class); ?>"><?php echo esc_html(number_format_i18n($pct_expected, 1)); ?>%</span><br>
+                    Avg / counted day: <strong><?php echo esc_html(number_format_i18n($dept_daily_avg, 1)); ?></strong>
+                    · Daily goal: <strong><?php echo esc_html(number_format_i18n($dept_goal)); ?></strong>
+                </p>
+            </div>
+        <?php } ?>
+        </div>
+
+        <?php foreach ($departments as $department):
+                $summary = $department_summaries[$department];
+                $rows = $summary['rows'];
+                $daily = $summary['daily'];
+                $weekly = $summary['weekly'];
+                $department_days = $summary['department_days'];
+                $dept_goal = $summary['dept_goal'];
+                ?>
+                <div class="tlk-perf-section">
+                <h2><?php echo esc_html($department); ?></h2>
+                <?php if (!$rows): ?><p>No production entries for this department in this period.</p><?php else: ?>
+                <table class="widefat striped">
+                    <thead><tr><th>Employee</th><th>Period Total</th><th>Days With Output</th><th>Avg / Active Day</th></tr></thead>
+                    <tbody><?php foreach ($rows as $row): ?>
+                        <tr>
+                            <td><strong><?php echo esc_html($row['employee']); ?></strong></td>
+                            <td><strong><?php echo esc_html(number_format_i18n($row['produced'])); ?></strong></td>
+                            <td><?php echo esc_html(number_format_i18n($row['active_days'])); ?></td>
+                            <td><?php echo esc_html(number_format_i18n($row['daily_average'], 1)); ?></td>
+                        </tr>
+                    <?php endforeach; ?></tbody>
+                </table>
+
+                <details style="margin-top:14px;">
+                    <summary style="cursor:pointer;font-weight:600;">Department Daily Totals</summary>
+                    <table class="widefat striped" style="margin-top:10px;">
+                        <thead><tr><th>Date</th><th>Department Total</th><th>Daily Goal</th><th>% of Daily Goal</th></tr></thead>
+                        <tbody><?php foreach ($department_days as $item): $day_total = (float) $item['produced']; $day_percent = $dept_goal > 0 ? ($day_total / $dept_goal) * 100 : 0; ?><tr>
+                            <td><?php echo esc_html(wp_date('D, M j, Y', strtotime($item['production_date']))); ?></td>
+                            <td><?php echo esc_html(number_format_i18n($day_total)); ?></td>
+                            <td><?php echo esc_html(number_format_i18n($dept_goal)); ?></td>
+                            <td><?php echo esc_html(number_format_i18n($day_percent, 1)); ?>%</td>
+                        </tr><?php endforeach; ?></tbody>
+                    </table>
+                </details>
+
+                <details style="margin-top:14px;">
+                    <summary style="cursor:pointer;font-weight:600;">Weekly Output</summary>
+                    <table class="widefat striped" style="margin-top:10px;">
+                        <thead><tr><th>Week Starting</th><th>Employee</th><th>Produced</th></tr></thead>
+                        <tbody><?php foreach ($weekly as $item): ?><tr>
+                            <td><?php echo esc_html(wp_date('M j, Y', strtotime($item['week_start']))); ?></td>
+                            <td><?php echo esc_html($item['employee']); ?></td>
+                            <td><?php echo esc_html(number_format_i18n((float)$item['produced'])); ?></td>
+                        </tr><?php endforeach; ?></tbody>
+                    </table>
+                </details>
+
+                <details style="margin-top:10px;">
+                    <summary style="cursor:pointer;font-weight:600;">Daily Output by Employee</summary>
+                    <table class="widefat striped" style="margin-top:10px;">
+                        <thead><tr><th>Date</th><th>Employee</th><th>Produced</th></tr></thead>
+                        <tbody><?php foreach ($daily as $item): ?><tr>
+                            <td><?php echo esc_html(wp_date('D, M j, Y', strtotime($item['production_date']))); ?></td>
+                            <td><?php echo esc_html($item['employee']); ?></td>
+                            <td><?php echo esc_html(number_format_i18n((float)$item['produced'])); ?></td>
+                        </tr><?php endforeach; ?></tbody>
+                    </table>
+                </details>
+                <?php endif; ?>
+                </div>
+            <?php endforeach; ?>
+
+        <details id="tlk-counting-rules" class="card tlk-perf-settings" style="padding:18px 22px;">
+            <summary style="cursor:pointer;font-weight:600;">Department Targets &amp; Frontend Visibility</summary>
             <p>Set each department's daily goal and choose whether its production statistics card is shown on the frontend. Hiding a department does not delete its production history or prevent new production entries.</p>
             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
                 <input type="hidden" name="action" value="tlk_save_department_targets">
@@ -2249,124 +2410,8 @@ function tlk_render_employee_performance_page() {
                     <button type="submit" class="button button-primary">Save Department Settings</button>
                 </div>
             </form>
-        </div>
-
-        <?php if (isset($_GET['targets_saved'])) : ?><div class="notice notice-success is-dismissible"><p>Employee targets saved.</p></div><?php endif; ?>
-
-        <div class="card" style="max-width:1100px;margin:18px 0;padding:18px 22px;">
-            <h2 style="margin-top:0;">Reporting Range</h2>
-            <form method="get" id="tlk-performance-range" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
-                <input type="hidden" name="page" value="tlk-employee-performance">
-                <label><strong>Range</strong><br>
-                    <select name="range" id="tlk-range-select">
-                        <?php foreach (array('today'=>'Today','this_week'=>'This Week','last_week'=>'Last Week','this_month'=>'This Month','last_month'=>'Last Month','custom'=>'Custom Range') as $value=>$text) : ?>
-                            <option value="<?php echo esc_attr($value); ?>" <?php selected($period['preset'], $value); ?>><?php echo esc_html($text); ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </label>
-                <label class="tlk-custom-date"><strong>Start</strong><br><input type="date" name="start_date" value="<?php echo esc_attr($period['start']); ?>"></label>
-                <label class="tlk-custom-date"><strong>End</strong><br><input type="date" name="end_date" value="<?php echo esc_attr($period['end']); ?>"></label>
-                <button class="button button-primary">View</button>
-            </form>
-            <p style="margin-bottom:0;"><strong>Showing:</strong> <?php echo esc_html($period['label']); ?></p>
-        </div>
-
-        <?php foreach ($departments as $department):
-                $rows = tlk_get_employee_performance_range($department, $period['start'], $period['end']);
-                $daily = tlk_get_production_daily_breakdown($department, $period['start'], $period['end']);
-                $weekly = tlk_get_production_weekly_breakdown($department, $period['start'], $period['end']);
-                $department_days = tlk_get_department_daily_totals_range($department, $period['start'], $period['end']);
-                $dept_total = array_sum(array_map(function($item){ return (float) $item['produced']; }, $department_days));
-                $recorded_days = count($department_days);
-                $dept_daily_avg = $recorded_days ? $dept_total / $recorded_days : 0;
-                $dept_goal = tlk_get_department_target($department);
-                $dept_percent = $dept_goal > 0 ? ($dept_daily_avg / $dept_goal) * 100 : 0;
-                ?>
-                <h2 style="margin-top:32px;"><?php echo esc_html($department); ?></h2>
-                <p><strong><?php echo esc_html(number_format_i18n($dept_total)); ?></strong> total parts &nbsp;|&nbsp; <strong><?php echo esc_html(number_format_i18n($dept_daily_avg, 1)); ?></strong> average department output per counted production day &nbsp;|&nbsp; Goal: <strong><?php echo esc_html(number_format_i18n($dept_goal)); ?></strong>/day &nbsp;|&nbsp; <strong><?php echo esc_html(number_format_i18n($dept_percent, 1)); ?>%</strong> of goal</p>
-                <?php if (!$rows): ?><p>No production entries for this department in this period.</p><?php else: ?>
-                <?php
-                // Build an audit-friendly list of the exact dated output that makes up each employee's range total.
-                $employee_days = array();
-                foreach ($daily as $day_item) {
-                    $employee_name = (string) $day_item['employee'];
-                    if (!isset($employee_days[$employee_name])) {
-                        $employee_days[$employee_name] = array();
-                    }
-                    $employee_days[$employee_name][] = array(
-                        'date'     => $day_item['production_date'],
-                        'produced' => (float) $day_item['produced'],
-                    );
-                }
-                ?>
-                <table class="widefat striped" style="max-width:1100px;">
-                    <thead><tr><th>Employee</th><th>Range Total</th><th>Days Included in Total</th><th>Days With Output</th><th>Avg / Active Day</th></tr></thead>
-                    <tbody><?php foreach ($rows as $row): ?>
-                        <tr>
-                            <td><strong><?php echo esc_html($row['employee']); ?></strong></td>
-                            <td><strong><?php echo esc_html(number_format_i18n($row['produced'])); ?></strong></td>
-                            <td>
-                                <?php
-                                $included_days = isset($employee_days[$row['employee']]) ? $employee_days[$row['employee']] : array();
-                                if (!$included_days) {
-                                    echo '&mdash;';
-                                } else {
-                                    $day_parts = array();
-                                    foreach ($included_days as $included_day) {
-                                        $day_parts[] = sprintf(
-                                            '%s (%s)',
-                                            wp_date('M j', strtotime($included_day['date'])),
-                                            number_format_i18n($included_day['produced'])
-                                        );
-                                    }
-                                    echo esc_html(implode(' + ', $day_parts));
-                                }
-                                ?>
-                            </td>
-                            <td><?php echo esc_html(number_format_i18n($row['active_days'])); ?></td>
-                            <td><?php echo esc_html(number_format_i18n($row['daily_average'], 1)); ?></td>
-                        </tr>
-                    <?php endforeach; ?></tbody>
-                </table>
-
-                <details style="max-width:1100px;margin-top:14px;">
-                    <summary style="cursor:pointer;font-weight:600;">Department Daily Totals</summary>
-                    <table class="widefat striped" style="margin-top:10px;">
-                        <thead><tr><th>Date</th><th>Department Total</th><th>Daily Goal</th><th>% of Goal</th></tr></thead>
-                        <tbody><?php foreach ($department_days as $item): $day_total = (float) $item['produced']; $day_percent = $dept_goal > 0 ? ($day_total / $dept_goal) * 100 : 0; ?><tr>
-                            <td><?php echo esc_html(wp_date('D, M j, Y', strtotime($item['production_date']))); ?></td>
-                            <td><?php echo esc_html(number_format_i18n($day_total)); ?></td>
-                            <td><?php echo esc_html(number_format_i18n($dept_goal)); ?></td>
-                            <td><?php echo esc_html(number_format_i18n($day_percent, 1)); ?>%</td>
-                        </tr><?php endforeach; ?></tbody>
-                    </table>
-                </details>
-
-                <details style="max-width:1100px;margin-top:14px;">
-                    <summary style="cursor:pointer;font-weight:600;">Weekly Output</summary>
-                    <table class="widefat striped" style="margin-top:10px;">
-                        <thead><tr><th>Week Starting</th><th>Employee</th><th>Produced</th></tr></thead>
-                        <tbody><?php foreach ($weekly as $item): ?><tr>
-                            <td><?php echo esc_html(wp_date('M j, Y', strtotime($item['week_start']))); ?></td>
-                            <td><?php echo esc_html($item['employee']); ?></td>
-                            <td><?php echo esc_html(number_format_i18n((float)$item['produced'])); ?></td>
-                        </tr><?php endforeach; ?></tbody>
-                    </table>
-                </details>
-
-                <details style="max-width:1100px;margin-top:10px;">
-                    <summary style="cursor:pointer;font-weight:600;">Daily Output</summary>
-                    <table class="widefat striped" style="margin-top:10px;">
-                        <thead><tr><th>Date</th><th>Employee</th><th>Produced</th></tr></thead>
-                        <tbody><?php foreach ($daily as $item): ?><tr>
-                            <td><?php echo esc_html(wp_date('D, M j, Y', strtotime($item['production_date']))); ?></td>
-                            <td><?php echo esc_html($item['employee']); ?></td>
-                            <td><?php echo esc_html(number_format_i18n((float)$item['produced'])); ?></td>
-                        </tr><?php endforeach; ?></tbody>
-                    </table>
-                </details>
-                <?php endif; ?>
-            <?php endforeach; ?>
+            <p style="margin:16px 0 0;color:#50575e;">Counted days: Monday–Thursday always count in the selected range. Friday counts only if that department logged production. Saturday and Sunday never count. Expected period output = daily goal × counted days. Average per counted day uses those same counted days, including any empty Monday–Thursday.</p>
+        </details>
     </div>
     <script>
     (function(){
