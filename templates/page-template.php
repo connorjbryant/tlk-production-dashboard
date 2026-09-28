@@ -360,6 +360,10 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
             }));
             ?>
 
+            <?php
+            $single_department_card = count($departments) === 1;
+            ?>
+
             <?php foreach ($departments as $department) : ?>
                 <?php
                 if ($department['performance']['met']) {
@@ -371,7 +375,8 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                 }
                 ?>
 
-                <div class="tlk-production-card <?php echo esc_attr($production_status_class); ?>">
+                <div class="tlk-production-card <?php echo esc_attr($production_status_class); ?><?php echo $single_department_card ? ' tlk-production-card--single' : ''; ?>">
+                    <div class="tlk-production-card__content">
                     <div class="tlk-production-card__top">
                         <h2><?php echo esc_html($department['name']); ?></h2>
                         <span class="tlk-status-icon" aria-hidden="true">
@@ -395,6 +400,18 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                             <span style="width: <?php echo esc_attr($department['percent']); ?>%;"></span>
                         </div>
                     </div>
+                    </div>
+
+                    <?php if ($single_department_card) : ?>
+                        <?php $department_image = strtolower($department['name']) . '.jpg'; ?>
+                        <div class="tlk-production-card__image-wrap" aria-hidden="true">
+                            <img
+                                class="tlk-production-card__image"
+                                src="<?php echo esc_url(plugin_dir_url(dirname(__FILE__)) . 'images/' . $department_image); ?>"
+                                alt=""
+                            >
+                        </div>
+                    <?php endif; ?>
                 </div>
             <?php endforeach; ?>
         </div>

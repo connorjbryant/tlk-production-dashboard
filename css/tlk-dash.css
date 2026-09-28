@@ -871,3 +871,39 @@ body.tlk-prod-dash .tlk-order-card {
   min-width: 0 !important;
   max-width: none !important;
 }
+/* Single visible department: use the open half of the card for its department image. */
+body.tlk-prod-dash .tlk-production-card--single {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.65fr) !important;
+  gap: 28px;
+  align-items: stretch !important;
+  overflow: hidden;
+  padding: 0 !important;
+}
+
+body.tlk-prod-dash .tlk-production-card--single .tlk-production-card__content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 28px 0 30px 26px;
+}
+
+body.tlk-prod-dash .tlk-production-card--single .tlk-production-card__bottom {
+  margin-top: auto;
+}
+
+body.tlk-prod-dash .tlk-production-card--single .tlk-production-card__image-wrap {
+  min-width: 0;
+  min-height: 280px;
+  overflow: hidden;
+  opacity: 0.9;
+}
+
+body.tlk-prod-dash .tlk-production-card--single .tlk-production-card__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 280px;
+  object-fit: cover;
+  object-position: center;
+}
