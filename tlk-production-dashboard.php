@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 2.0.5
+ * Version: 2.0.6
  * Author: Connor Bryant
  * License: GPL-2.0+
  */
@@ -24,7 +24,7 @@ function tlk_dash_enqueue_assets(){
         return;
     }
 
-    $version = '2.0.5';
+    $version = '2.0.6';
 
     wp_enqueue_style(
         'tlk_dash_styles',
@@ -1926,6 +1926,26 @@ function tlk_get_department_target($department) {
     return isset($targets[$department]) ? (float) $targets[$department] : 60.0;
 }
 
+/**
+ * Departments that should be visible in the public frontend statistics area.
+ * This only controls display; it does not remove production history or disable entry logging.
+ */
+function tlk_get_visible_frontend_departments() {
+    $all_departments = array('CNC', 'Pouring', 'Building');
+    $saved = get_option('tlk_visible_frontend_departments', null);
+
+    // Existing installs default to showing every department until the setting is saved.
+    if (!is_array($saved)) {
+        return $all_departments;
+    }
+
+    return array_values(array_intersect($all_departments, $saved));
+}
+
+function tlk_department_is_visible_on_frontend($department) {
+    return in_array($department, tlk_get_visible_frontend_departments(), true);
+}
+
 function tlk_save_department_targets() {
     if (!tlk_can_manage_employee_performance()) {
         wp_die('You are not allowed to manage department targets.');
@@ -1944,6 +1964,12 @@ function tlk_save_department_targets() {
     }
 
     update_option('tlk_department_targets', $targets, false);
+
+    $posted_visible = isset($_POST['visible_departments'])
+        ? (array) wp_unslash($_POST['visible_departments'])
+        : array();
+    $visible_departments = array_values(array_intersect($departments, array_map('sanitize_text_field', $posted_visible)));
+    update_option('tlk_visible_frontend_departments', $visible_departments, false);
 
     wp_safe_redirect(add_query_arg(array(
         'page' => 'tlk-employee-performance',
@@ -2198,20 +2224,29 @@ function tlk_render_employee_performance_page() {
         <p><a href="/tlk-production-dashboard">Go To Dashboard Overview</a></p>
         <?php if (isset($_GET['department_targets_saved'])) : ?><div class="notice notice-success is-dismissible"><p>Department targets saved.</p></div><?php endif; ?>
 
-        <?php $department_targets = tlk_get_department_targets(); ?>
+        <?php
+        $department_targets = tlk_get_department_targets();
+        $visible_frontend_departments = tlk_get_visible_frontend_departments();
+        ?>
         <div class="card" style="max-width:900px;margin:18px 0;padding:18px 22px;">
-            <h2 style="margin-top:0;">Department Targets</h2>
-            <p>Enter the total number of parts the entire department should produce per production day. Monday–Thursday are standard production days; Friday is optional and only counts when that department records production. Saturday and Sunday never count. The frontend compares the month-to-date average department output directly with this goal.</p>
+            <h2 style="margin-top:0;">Department Targets &amp; Frontend Visibility</h2>
+            <p>Set each department's daily goal and choose whether its production statistics card is shown on the frontend. Hiding a department does not delete its production history or prevent new production entries.</p>
             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
                 <input type="hidden" name="action" value="tlk_save_department_targets">
                 <?php wp_nonce_field('tlk_save_department_targets'); ?>
                 <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end;">
                     <?php foreach ($departments as $target_department) : ?>
-                        <label><strong><?php echo esc_html($target_department); ?> Department Daily Goal</strong><br>
-                            <input type="number" min="0" step="1" name="department_targets[<?php echo esc_attr($target_department); ?>]" value="<?php echo esc_attr($department_targets[$target_department]); ?>" style="width:120px;">
-                        </label>
+                        <div style="min-width:190px;">
+                            <label><strong><?php echo esc_html($target_department); ?> Department Daily Goal</strong><br>
+                                <input type="number" min="0" step="1" name="department_targets[<?php echo esc_attr($target_department); ?>]" value="<?php echo esc_attr($department_targets[$target_department]); ?>" style="width:120px;">
+                            </label>
+                            <label style="display:block;margin-top:10px;">
+                                <input type="checkbox" name="visible_departments[]" value="<?php echo esc_attr($target_department); ?>" <?php checked(in_array($target_department, $visible_frontend_departments, true)); ?>>
+                                Show on frontend
+                            </label>
+                        </div>
                     <?php endforeach; ?>
-                    <button type="submit" class="button button-primary">Save Department Targets</button>
+                    <button type="submit" class="button button-primary">Save Department Settings</button>
                 </div>
             </form>
         </div>

@@ -354,6 +354,10 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                 array('name' => 'Pouring', 'quota' => $pouring_quota, 'performance' => $pouring_performance, 'percent' => $pouring_percent),
                 array('name' => 'Building', 'quota' => $building_quota, 'performance' => $building_performance, 'percent' => $building_percent),
             );
+
+            $departments = array_values(array_filter($departments, function ($department) {
+                return tlk_department_is_visible_on_frontend($department['name']);
+            }));
             ?>
 
             <?php foreach ($departments as $department) : ?>
