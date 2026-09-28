@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 2.0.9
+ * Version: 3.1.0
  * Author: Connor Bryant
  * License: GPL-2.0+
  */
@@ -24,7 +24,7 @@ function tlk_dash_enqueue_assets(){
         return;
     }
 
-    $version = '2.0.9';
+    $version = '3.1.0';
 
     wp_enqueue_style(
         'tlk_dash_styles',
@@ -2307,6 +2307,7 @@ function tlk_render_employee_performance_page() {
             $dept_goal = tlk_get_department_target($department);
             $expected_total = $dept_goal * $counted_days;
             $dept_daily_avg = $counted_days ? $dept_total / $counted_days : 0;
+            $dept_daily_avg_rounded = (int) round($dept_daily_avg);
             $pct_expected = $expected_total > 0 ? ($dept_total / $expected_total) * 100 : 0;
             $pct_daily = $dept_goal > 0 ? ($dept_daily_avg / $dept_goal) * 100 : 0;
             $department_summaries[$department] = compact('rows','daily','weekly','department_days','dept_total','counted_days','recorded_days','dept_goal','expected_total','dept_daily_avg','pct_expected','pct_daily');
@@ -2319,8 +2320,9 @@ function tlk_render_employee_performance_page() {
                     Expected: <strong><?php echo esc_html(number_format_i18n($expected_total)); ?></strong>
                     (<?php echo esc_html(number_format_i18n($dept_goal)); ?>/day × <?php echo esc_html(number_format_i18n($counted_days)); ?> counted days)<br>
                     Period vs expected: <span class="<?php echo esc_attr($pct_class); ?>"><?php echo esc_html(number_format_i18n($pct_expected, 1)); ?>%</span><br>
-                    Avg / counted parts per day: <strong><?php echo esc_html(number_format_i18n($dept_daily_avg, 1)); ?></strong>
-                    · Daily goal: <strong><?php echo esc_html(number_format_i18n($dept_goal)); ?></strong>
+                    Avg parts per day (Parts / Counted Days): <strong><?php echo esc_html(number_format_i18n($dept_daily_avg_rounded)); ?></strong>
+                    · Daily goal: <strong><?php echo esc_html(number_format_i18n($dept_goal)); ?></strong><br>
+                    <span style="color:#646970;">Exact average: <?php echo esc_html(number_format_i18n($dept_daily_avg, 2)); ?></span>
                 </p>
             </div>
         <?php } ?>
