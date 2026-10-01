@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 3.4.0
+ * Version: 3.4.2
  * Author: Connor Bryant
  * License: GPL-2.0+
  */
@@ -24,7 +24,7 @@ function tlk_dash_enqueue_assets(){
         return;
     }
 
-    $version = '3.4.0';
+    $version = '3.4.2';
 
     wp_enqueue_style(
         'tlk_dash_styles',
@@ -1609,6 +1609,47 @@ function tlk_get_available_dashboard_periods() {
 /**
  * Get on-time delivery stats for a month.
  */
+/**
+ * Get on-time delivery history for an arbitrary reporting range.
+ * The shipped date determines which reporting period owns the delivery.
+ */
+function tlk_get_on_time_delivery_range($start_date, $end_date) {
+    global $wpdb;
+
+    if (!tlk_order_history_table_exists()) {
+        return array('percent' => null, 'on_time' => 0, 'total' => 0, 'orders' => array());
+    }
+
+    $table_name = $wpdb->prefix . 'tlk_order_history';
+    $orders = $wpdb->get_results(
+        $wpdb->prepare(
+            "SELECT id, po_number, due_date, shipped_date, on_time
+             FROM {$table_name}
+             WHERE shipped_date >= %s
+               AND shipped_date <= %s
+             ORDER BY shipped_date DESC, po_number ASC",
+            $start_date,
+            $end_date
+        ),
+        ARRAY_A
+    );
+
+    $total = count($orders);
+    $on_time = 0;
+    foreach ($orders as $order) {
+        if ((int) $order['on_time'] === 1) {
+            $on_time++;
+        }
+    }
+
+    return array(
+        'percent' => $total > 0 ? ($on_time / $total) * 100 : null,
+        'on_time' => $on_time,
+        'total'   => $total,
+        'orders'  => $orders,
+    );
+}
+
 function tlk_get_on_time_delivery($year, $month) {
     global $wpdb;
 
@@ -2099,6 +2140,16 @@ function tlk_employee_performance_own_notices() {
     if (isset($_GET['targets_saved'])) {
         echo '<div class="notice notice-success is-dismissible"><p>Employee targets saved.</p></div>';
     }
+    if (isset($_GET['delivery_saved']) && $_GET['delivery_saved'] !== '0') {
+        echo '<div class="notice notice-success is-dismissible"><p>Delivery history ' . esc_html($_GET['delivery_saved'] === 'updated' ? 'updated' : 'added') . '.</p></div>';
+    }
+    if (isset($_GET['delivery_deleted'])) {
+        echo '<div class="notice notice-success is-dismissible"><p>Delivery history entry deleted.</p></div>';
+    }
+    if (isset($_GET['delivery_error'])) {
+        $message = $_GET['delivery_error'] === 'duplicate' ? 'That PO / order number is already in delivery history.' : 'Enter a PO / order number and valid due and shipped dates.';
+        echo '<div class="notice notice-error is-dismissible"><p>' . esc_html($message) . '</p></div>';
+    }
 }
 
 function tlk_performance_percent_class($percent) {
@@ -2110,6 +2161,155 @@ function tlk_performance_percent_class($percent) {
     }
     return 'tlk-perf-low';
 }
+
+/**
+ * Preserve the Employee Performance reporting range after delivery-history actions.
+ */
+function tlk_delivery_history_redirect_args() {
+    $args = array('page' => 'tlk-employee-performance');
+    $range = isset($_POST['return_range']) ? sanitize_key(wp_unslash($_POST['return_range'])) : 'this_month';
+    $allowed = array('today', 'this_week', 'last_week', 'this_month', 'last_month', 'custom');
+    $args['range'] = in_array($range, $allowed, true) ? $range : 'this_month';
+
+    if ($args['range'] === 'custom') {
+        foreach (array('start_date', 'end_date') as $key) {
+            $value = isset($_POST['return_' . $key]) ? sanitize_text_field(wp_unslash($_POST['return_' . $key])) : '';
+            if (preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $value)) {
+                $args[$key] = $value;
+            }
+        }
+    }
+    return $args;
+}
+
+function tlk_save_delivery_history() {
+    if (!tlk_can_manage_employee_performance()) {
+        wp_die('You are not allowed to manage delivery history.');
+    }
+    check_admin_referer('tlk_save_delivery_history');
+
+    global $wpdb;
+    tlk_order_history_table_exists();
+    $table = $wpdb->prefix . 'tlk_order_history';
+
+    $id = isset($_POST['history_id']) ? absint($_POST['history_id']) : 0;
+    $po = isset($_POST['po_number']) ? sanitize_text_field(wp_unslash($_POST['po_number'])) : '';
+    $due = isset($_POST['due_date']) ? sanitize_text_field(wp_unslash($_POST['due_date'])) : '';
+    $shipped = isset($_POST['shipped_date']) ? sanitize_text_field(wp_unslash($_POST['shipped_date'])) : '';
+
+    $valid_date = static function($date) {
+        if (!preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $date)) return false;
+        $dt = DateTime::createFromFormat('!Y-m-d', $date);
+        return $dt && $dt->format('Y-m-d') === $date;
+    };
+
+    $redirect = tlk_delivery_history_redirect_args();
+    if ($po === '' || !$valid_date($due) || !$valid_date($shipped)) {
+        $redirect['delivery_error'] = 'invalid';
+        wp_safe_redirect(add_query_arg($redirect, admin_url('admin.php')));
+        exit;
+    }
+
+    $duplicate = (int) $wpdb->get_var($wpdb->prepare(
+        "SELECT id FROM {$table} WHERE po_number = %s AND id != %d LIMIT 1",
+        $po, $id
+    ));
+    if ($duplicate) {
+        $redirect['delivery_error'] = 'duplicate';
+        wp_safe_redirect(add_query_arg($redirect, admin_url('admin.php')));
+        exit;
+    }
+
+    $data = array(
+        'po_number'    => $po,
+        'due_date'     => $due,
+        'shipped_date' => $shipped,
+        'on_time'      => ($shipped <= $due) ? 1 : 0,
+    );
+
+    if ($id) {
+        $result = $wpdb->update($table, $data, array('id' => $id), array('%s','%s','%s','%d'), array('%d'));
+        $redirect['delivery_saved'] = $result === false ? '0' : 'updated';
+    } else {
+        $result = $wpdb->insert($table, $data, array('%s','%s','%s','%d'));
+        $redirect['delivery_saved'] = $result === false ? '0' : 'added';
+    }
+
+    wp_safe_redirect(add_query_arg($redirect, admin_url('admin.php')));
+    exit;
+}
+add_action('admin_post_tlk_save_delivery_history', 'tlk_save_delivery_history');
+
+function tlk_delete_delivery_history() {
+    if (!tlk_can_manage_employee_performance()) {
+        wp_die('You are not allowed to manage delivery history.');
+    }
+    check_admin_referer('tlk_delete_delivery_history');
+
+    global $wpdb;
+    $id = isset($_POST['history_id']) ? absint($_POST['history_id']) : 0;
+    if ($id) {
+        $wpdb->delete($wpdb->prefix . 'tlk_order_history', array('id' => $id), array('%d'));
+    }
+
+    $redirect = tlk_delivery_history_redirect_args();
+    $redirect['delivery_deleted'] = '1';
+    wp_safe_redirect(add_query_arg($redirect, admin_url('admin.php')));
+    exit;
+}
+add_action('admin_post_tlk_delete_delivery_history', 'tlk_delete_delivery_history');
+
+/**
+ * Export the on-time delivery history for the currently selected reporting range.
+ */
+function tlk_export_delivery_history_csv() {
+    if (!tlk_can_manage_employee_performance()) {
+        wp_die('You are not allowed to export delivery history.');
+    }
+    check_admin_referer('tlk_export_delivery_history_csv');
+
+    $period = tlk_employee_performance_period();
+    $stats  = tlk_get_on_time_delivery_range($period['start'], $period['end']);
+
+    $filename = sprintf(
+        'tlk-on-time-delivery-%s-to-%s.csv',
+        sanitize_file_name($period['start']),
+        sanitize_file_name($period['end'])
+    );
+
+    nocache_headers();
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+
+    $output = fopen('php://output', 'w');
+    if ($output === false) {
+        wp_die('Unable to create CSV export.');
+    }
+
+    // UTF-8 BOM helps Excel open the file cleanly.
+    fwrite($output, "\xEF\xBB\xBF");
+    fputcsv($output, array('Reporting Range', $period['label']));
+    fputcsv($output, array('Start Date', $period['start']));
+    fputcsv($output, array('End Date', $period['end']));
+    fputcsv($output, array('Total Deliveries', (int) $stats['total']));
+    fputcsv($output, array('On-Time Deliveries', (int) $stats['on_time']));
+    fputcsv($output, array('On-Time Percentage', $stats['total'] > 0 ? number_format((float) $stats['percent'], 1) . '%' : 'N/A'));
+    fputcsv($output, array());
+    fputcsv($output, array('PO / Order Number', 'Due Date', 'Shipped Date', 'Status'));
+
+    foreach ($stats['orders'] as $delivery) {
+        fputcsv($output, array(
+            $delivery['po_number'],
+            $delivery['due_date'],
+            $delivery['shipped_date'],
+            ((int) $delivery['on_time'] === 1) ? 'On Time' : 'Late',
+        ));
+    }
+
+    fclose($output);
+    exit;
+}
+add_action('admin_post_tlk_export_delivery_history_csv', 'tlk_export_delivery_history_csv');
 
 function tlk_save_employee_targets() {
     if (!tlk_can_manage_employee_performance()) wp_die('You are not allowed to manage employee targets.');
@@ -2253,6 +2453,18 @@ function tlk_render_employee_performance_page() {
     $period = tlk_employee_performance_period();
     $department_targets = tlk_get_department_targets();
     $visible_frontend_departments = tlk_get_visible_frontend_departments();
+    $delivery_stats = tlk_get_on_time_delivery_range($period['start'], $period['end']);
+    $edit_delivery = null;
+    if (isset($_GET['edit_delivery'])) {
+        global $wpdb;
+        $edit_id = absint($_GET['edit_delivery']);
+        if ($edit_id) {
+            $edit_delivery = $wpdb->get_row($wpdb->prepare(
+                "SELECT id, po_number, due_date, shipped_date FROM {$wpdb->prefix}tlk_order_history WHERE id = %d",
+                $edit_id
+            ), ARRAY_A);
+        }
+    }
     ?>
     <style>
         .tlk-perf-wrap { max-width: 1180px; }
@@ -2291,6 +2503,85 @@ function tlk_render_employee_performance_page() {
                 <button class="button button-primary">View</button>
             </form>
             <p style="margin-bottom:0;"><strong>Showing:</strong> <?php echo esc_html($period['label']); ?></p>
+        </div>
+
+        <div class="card" style="margin:18px 0;padding:18px 22px;max-width:none;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                <h2 style="margin:0;">On-Time Delivery History</h2>
+                <form method="get" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="margin:0;">
+                    <input type="hidden" name="action" value="tlk_export_delivery_history_csv">
+                    <input type="hidden" name="range" value="<?php echo esc_attr($period['preset']); ?>">
+                    <?php if ($period['preset'] === 'custom') : ?>
+                        <input type="hidden" name="start_date" value="<?php echo esc_attr($period['start']); ?>">
+                        <input type="hidden" name="end_date" value="<?php echo esc_attr($period['end']); ?>">
+                    <?php endif; ?>
+                    <?php wp_nonce_field('tlk_export_delivery_history_csv'); ?>
+                    <button type="submit" class="button">Export CSV</button>
+                </form>
+            </div>
+            <p style="color:#50575e;">Uses the Reporting Range above and groups deliveries by <strong>shipped date</strong>. Entries are automatically marked on time when the shipped date is on or before the due date.</p>
+
+            <div style="display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap;margin:18px 0 22px;">
+                <div style="min-width:220px;">
+                    <div style="font-size:13px;color:#646970;font-weight:600;">ON-TIME DELIVERY</div>
+                    <?php if ($delivery_stats['total'] > 0) : ?>
+                        <div style="font-size:34px;line-height:1.2;font-weight:600;margin-top:3px;"><?php echo esc_html(number_format_i18n($delivery_stats['percent'], 1)); ?>%</div>
+                        <div style="color:#50575e;"><?php echo esc_html(number_format_i18n($delivery_stats['on_time'])); ?> of <?php echo esc_html(number_format_i18n($delivery_stats['total'])); ?> deliveries on time</div>
+                    <?php else : ?>
+                        <div style="font-size:34px;line-height:1.2;font-weight:600;color:#646970;margin-top:3px;">N/A</div>
+                        <div style="color:#50575e;">No deliveries in this reporting range.</div>
+                    <?php endif; ?>
+                </div>
+
+                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;flex:1;">
+                    <input type="hidden" name="action" value="tlk_save_delivery_history">
+                    <input type="hidden" name="history_id" value="<?php echo esc_attr($edit_delivery['id'] ?? 0); ?>">
+                    <input type="hidden" name="return_range" value="<?php echo esc_attr($period['preset']); ?>">
+                    <input type="hidden" name="return_start_date" value="<?php echo esc_attr($period['start']); ?>">
+                    <input type="hidden" name="return_end_date" value="<?php echo esc_attr($period['end']); ?>">
+                    <?php wp_nonce_field('tlk_save_delivery_history'); ?>
+                    <label><strong>PO / Order Number</strong><br><input type="text" name="po_number" required value="<?php echo esc_attr($edit_delivery['po_number'] ?? ''); ?>"></label>
+                    <label><strong>Due Date</strong><br><input type="date" name="due_date" required value="<?php echo esc_attr($edit_delivery['due_date'] ?? ''); ?>"></label>
+                    <label><strong>Shipped Date</strong><br><input type="date" name="shipped_date" required value="<?php echo esc_attr($edit_delivery['shipped_date'] ?? ''); ?>"></label>
+                    <button type="submit" class="button button-primary"><?php echo $edit_delivery ? 'Update Delivery' : 'Add Delivery'; ?></button>
+                    <?php if ($edit_delivery) : ?>
+                        <a class="button" href="<?php echo esc_url(add_query_arg(array_filter(array('page'=>'tlk-employee-performance','range'=>$period['preset'],'start_date'=>$period['preset']==='custom'?$period['start']:null,'end_date'=>$period['preset']==='custom'?$period['end']:null)), admin_url('admin.php'))); ?>">Cancel</a>
+                    <?php endif; ?>
+                </form>
+            </div>
+
+            <?php if ($delivery_stats['orders']) : ?>
+                <table class="widefat striped">
+                    <thead><tr><th>PO / Order</th><th>Due Date</th><th>Shipped Date</th><th>Status</th><th style="width:150px;">Actions</th></tr></thead>
+                    <tbody>
+                    <?php foreach ($delivery_stats['orders'] as $delivery) :
+                        $edit_args = array('page'=>'tlk-employee-performance','range'=>$period['preset'],'edit_delivery'=>(int)$delivery['id']);
+                        if ($period['preset'] === 'custom') { $edit_args['start_date']=$period['start']; $edit_args['end_date']=$period['end']; }
+                    ?>
+                        <tr>
+                            <td><strong><?php echo esc_html($delivery['po_number']); ?></strong></td>
+                            <td><?php echo !empty($delivery['due_date']) ? esc_html(wp_date('M j, Y', strtotime($delivery['due_date']))) : '&mdash;'; ?></td>
+                            <td><?php echo esc_html(wp_date('M j, Y', strtotime($delivery['shipped_date']))); ?></td>
+                            <td><?php if ((int)$delivery['on_time'] === 1) : ?><span style="color:#007017;font-weight:600;">On Time</span><?php else : ?><span style="color:#b32d2e;font-weight:600;">Late</span><?php endif; ?></td>
+                            <td>
+                                <a class="button button-small" href="<?php echo esc_url(add_query_arg($edit_args, admin_url('admin.php'))); ?>">Edit</a>
+                                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="display:inline;" onsubmit="return confirm('Delete this delivery history entry?');">
+                                    <input type="hidden" name="action" value="tlk_delete_delivery_history">
+                                    <input type="hidden" name="history_id" value="<?php echo esc_attr($delivery['id']); ?>">
+                                    <input type="hidden" name="return_range" value="<?php echo esc_attr($period['preset']); ?>">
+                                    <input type="hidden" name="return_start_date" value="<?php echo esc_attr($period['start']); ?>">
+                                    <input type="hidden" name="return_end_date" value="<?php echo esc_attr($period['end']); ?>">
+                                    <?php wp_nonce_field('tlk_delete_delivery_history'); ?>
+                                    <button type="submit" class="button button-small">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            <?php else : ?>
+                <p style="margin-bottom:0;color:#646970;">No delivery history entries were shipped during <?php echo esc_html($period['label']); ?>.</p>
+            <?php endif; ?>
         </div>
 
         <div class="tlk-perf-cards">
