@@ -39,6 +39,60 @@ jQuery(document).ready(function ($) {
     blowOpenThemeWrappers();
     $(window).on('resize orientationchange', blowOpenThemeWrappers);
 
+    /*
+     * TV display helpers.
+     * - Refresh an unattended dashboard every 5 minutes so production data stays current.
+     * - Nudge the rendered dashboard by 1px once per minute to keep a long-running TV
+     *   display from being perfectly static and to help reduce image retention.
+     *
+     * A refresh is deferred while someone is actively editing a form so an in-progress
+     * production entry is never discarded by the TV refresh timer.
+     */
+    var dashboardDirty = false;
+    var refreshEveryMs = 5 * 60 * 1000;
+    var refreshRetryMs = 60 * 1000;
+    var pixelShiftEveryMs = 60 * 1000;
+    var pixelShiftIndex = 0;
+    var pixelShifts = [
+        [0, 0], [1, 0], [1, 1], [0, 1],
+        [-1, 1], [-1, 0], [-1, -1], [0, -1]
+    ];
+
+    $(document).on('input change', '.dash-container form :input', function () {
+        dashboardDirty = true;
+    });
+
+    $('.dash-container form').on('submit', function () {
+        dashboardDirty = false;
+    });
+
+    function dashboardIsBeingEdited() {
+        var active = document.activeElement;
+        var activeInForm = active && $(active).closest('.dash-container form').length > 0;
+        return dashboardDirty || activeInForm;
+    }
+
+    function refreshDashboardWhenIdle() {
+        if (document.visibilityState === 'visible' && !dashboardIsBeingEdited()) {
+            window.location.reload();
+            return;
+        }
+
+        window.setTimeout(refreshDashboardWhenIdle, refreshRetryMs);
+    }
+
+    function shiftDashboardPixels() {
+        pixelShiftIndex = (pixelShiftIndex + 1) % pixelShifts.length;
+        var shift = pixelShifts[pixelShiftIndex];
+        var $dashboard = $('.dash-container');
+
+        $dashboard.css('transform', 'translate3d(' + shift[0] + 'px,' + shift[1] + 'px,0)');
+        $dashboard.css('background-position', 'calc(50% + ' + shift[0] + 'px) calc(50% + ' + shift[1] + 'px)');
+    }
+
+    window.setTimeout(refreshDashboardWhenIdle, refreshEveryMs);
+    window.setInterval(shiftDashboardPixels, pixelShiftEveryMs);
+
     var $departmentSelect = $('#department');
     var $departmentImage = $('#department-image');
 
