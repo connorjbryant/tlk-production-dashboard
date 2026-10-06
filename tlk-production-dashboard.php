@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 3.4.3
+ * Version: 3.4.6
  * Author: Connor Bryant
  * License: GPL-2.0+
  */
@@ -24,7 +24,7 @@ function tlk_dash_enqueue_assets(){
         return;
     }
 
-    $version = '3.4.3';
+    $version = '3.4.6';
 
     wp_enqueue_style(
         'tlk_dash_styles',
@@ -263,6 +263,137 @@ function tlk_maybe_upgrade_production_table() {
     update_option('tlk_production_db_version', $db_version);
 }
 add_action('init', 'tlk_maybe_upgrade_production_table', 5);
+
+
+/**
+ * Reserved label for legacy department totals where the employee breakdown is unknown.
+ * These parts count toward department production totals, but never toward employee
+ * performance, active person-days, or per-person goal percentages.
+ */
+function tlk_historical_unassigned_employee() {
+    return 'Historical / Unassigned';
+}
+
+function tlk_is_historical_unassigned_employee($employee) {
+    return strcasecmp(trim((string) $employee), tlk_historical_unassigned_employee()) === 0;
+}
+
+/**
+ * Employee roster table. This is intentionally separate from production logs:
+ * being on the roster never counts as production or as an active person-day.
+ */
+function tlk_create_employee_roster_table() {
+    global $wpdb;
+
+    $table_name      = $wpdb->prefix . 'tlk_employees';
+    $charset_collate = $wpdb->get_charset_collate();
+
+    $sql = "CREATE TABLE {$table_name} (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        employee_name VARCHAR(100) NOT NULL,
+        active TINYINT(1) NOT NULL DEFAULT 1,
+        created_at DATETIME NOT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY employee_name (employee_name),
+        KEY active (active)
+    ) {$charset_collate};";
+
+    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    dbDelta($sql);
+}
+register_activation_hook(__FILE__, 'tlk_create_employee_roster_table');
+
+function tlk_seed_employee_roster_from_production() {
+    global $wpdb;
+
+    $roster     = $wpdb->prefix . 'tlk_employees';
+    $production = $wpdb->prefix . 'tlk_production';
+
+    $names = $wpdb->get_col(
+        "SELECT DISTINCT employee FROM {$production}
+         WHERE employee IS NOT NULL AND employee != ''
+           AND employee != 'Historical / Unassigned'
+         ORDER BY employee ASC"
+    );
+
+    foreach ($names as $name) {
+        $name = sanitize_text_field($name);
+        if ($name === '') continue;
+
+        $wpdb->query($wpdb->prepare(
+            "INSERT IGNORE INTO {$roster} (employee_name, active, created_at) VALUES (%s, 1, %s)",
+            $name,
+            current_time('mysql')
+        ));
+    }
+}
+
+function tlk_maybe_upgrade_employee_roster_table() {
+    $db_version = '1.0.0';
+    if (get_option('tlk_employee_roster_db_version') === $db_version) return;
+
+    tlk_create_employee_roster_table();
+    tlk_seed_employee_roster_from_production();
+    update_option('tlk_employee_roster_db_version', $db_version);
+}
+add_action('init', 'tlk_maybe_upgrade_employee_roster_table', 6);
+
+function tlk_can_manage_employee_roster() {
+    if (!is_user_logged_in()) return false;
+    $user = wp_get_current_user();
+    return strtolower((string) $user->user_email) === 'connor@flexrockperformance.com';
+}
+
+function tlk_get_employee_roster($active_only = true) {
+    global $wpdb;
+    $table = $wpdb->prefix . 'tlk_employees';
+    $where = $active_only ? 'WHERE active = 1' : '';
+
+    return $wpdb->get_results(
+        "SELECT id, employee_name, active FROM {$table} {$where} ORDER BY employee_name ASC"
+    );
+}
+
+function tlk_handle_add_employee_roster() {
+    if (!tlk_can_manage_employee_roster()) wp_die('You do not have permission to manage employees.', 'Permission Denied', array('response' => 403));
+    check_admin_referer('tlk_manage_employee_roster');
+
+    $name = isset($_POST['employee_name']) ? sanitize_text_field(wp_unslash($_POST['employee_name'])) : '';
+    if ($name === '') wp_die('Please enter an employee name.');
+
+    global $wpdb;
+    $table = $wpdb->prefix . 'tlk_employees';
+    $existing = $wpdb->get_row($wpdb->prepare("SELECT id, active FROM {$table} WHERE employee_name = %s LIMIT 1", $name));
+
+    if ($existing) {
+        $wpdb->update($table, array('active' => 1), array('id' => (int) $existing->id), array('%d'), array('%d'));
+    } else {
+        $wpdb->insert($table, array('employee_name' => $name, 'active' => 1, 'created_at' => current_time('mysql')), array('%s','%d','%s'));
+    }
+
+    $redirect = wp_get_referer() ?: home_url('/tlk-production-dashboard/');
+    wp_safe_redirect(add_query_arg('tlk_employee_saved', '1', $redirect));
+    exit;
+}
+add_action('admin_post_tlk_add_employee_roster', 'tlk_handle_add_employee_roster');
+
+function tlk_handle_toggle_employee_roster() {
+    if (!tlk_can_manage_employee_roster()) wp_die('You do not have permission to manage employees.', 'Permission Denied', array('response' => 403));
+    check_admin_referer('tlk_manage_employee_roster');
+
+    $id = isset($_POST['employee_id']) ? absint($_POST['employee_id']) : 0;
+    $active = isset($_POST['active']) ? (int) (bool) absint($_POST['active']) : 0;
+    if (!$id) wp_die('Invalid employee.');
+
+    global $wpdb;
+    $table = $wpdb->prefix . 'tlk_employees';
+    $wpdb->update($table, array('active' => $active), array('id' => $id), array('%d'), array('%d'));
+
+    $redirect = wp_get_referer() ?: home_url('/tlk-production-dashboard/');
+    wp_safe_redirect(add_query_arg('tlk_employee_saved', '1', $redirect));
+    exit;
+}
+add_action('admin_post_tlk_toggle_employee_roster', 'tlk_handle_toggle_employee_roster');
 
 /**
  * Make sure TLK table exists.
@@ -1756,19 +1887,12 @@ function tlk_handle_server_cron_sync() {
 }
 add_action('init', 'tlk_handle_server_cron_sync');
 
-/* Select employees from existing production records */
+/* Select active employees from the dedicated roster. */
 function tlk_select_employee() {
-    global $wpdb;
-
-    $table_name = $wpdb->prefix . 'tlk_production';
-
-    return $wpdb->get_col(
-        "SELECT DISTINCT employee
-         FROM {$table_name}
-         WHERE employee IS NOT NULL
-           AND employee != ''
-         ORDER BY employee ASC"
-    );
+    $rows = tlk_get_employee_roster(true);
+    return array_map(static function ($row) {
+        return $row->employee_name;
+    }, $rows);
 }
 
 /**
@@ -1784,6 +1908,7 @@ function custom_login_redirect($redirect_to, $request, $user) {
         'connor@flexrockperformance.com',
         'josh@tlkprecision.com',
         'brian@tlkprecision.com',
+        'brianj@tlkprecision.com',
         'todd@tlkprecision.com',
         'deric@tlkprecision.com',
     );
@@ -1872,7 +1997,7 @@ function tlk_get_department_daily_average($department, $year = null, $month = nu
     $range_end = $range_end_obj->format('Y-m-d');
 
     $stats = tlk_get_department_person_day_stats($department, $month_start, $range_end);
-    return $stats['person_days'] > 0 ? $stats['total_parts'] / $stats['person_days'] : 0;
+    return $stats['person_days'] > 0 ? $stats['attributable_parts'] / $stats['person_days'] : 0;
 }
 
 /**
@@ -1883,22 +2008,30 @@ function tlk_get_department_person_day_stats($department, $start_date, $end_date
     global $wpdb;
     $production = $wpdb->prefix . 'tlk_production';
 
+    $historical = tlk_historical_unassigned_employee();
     $row = $wpdb->get_row($wpdb->prepare(
         "SELECT COALESCE(SUM(CAST(qty AS DECIMAL(10,2))), 0) AS total_parts,
-                COUNT(DISTINCT CONCAT(DATE(entry_date), '|', employee)) AS person_days
+                COALESCE(SUM(CASE WHEN employee != %s THEN CAST(qty AS DECIMAL(10,2)) ELSE 0 END), 0) AS attributable_parts,
+                COALESCE(SUM(CASE WHEN employee = %s THEN CAST(qty AS DECIMAL(10,2)) ELSE 0 END), 0) AS historical_parts,
+                COUNT(DISTINCT CASE WHEN employee != %s AND employee IS NOT NULL AND employee != ''
+                    THEN CONCAT(DATE(entry_date), '|', employee) END) AS person_days
          FROM {$production}
          WHERE department = %s
            AND entry_date BETWEEN %s AND %s
-           AND WEEKDAY(entry_date) BETWEEN 0 AND 4
-           AND employee IS NOT NULL AND employee != ''",
+           AND WEEKDAY(entry_date) BETWEEN 0 AND 4",
+        $historical,
+        $historical,
+        $historical,
         $department,
         $start_date . ' 00:00:00',
         $end_date . ' 23:59:59'
     ), ARRAY_A);
 
     return array(
-        'total_parts' => isset($row['total_parts']) ? (float) $row['total_parts'] : 0,
-        'person_days' => isset($row['person_days']) ? (int) $row['person_days'] : 0,
+        'total_parts'       => isset($row['total_parts']) ? (float) $row['total_parts'] : 0,
+        'attributable_parts'=> isset($row['attributable_parts']) ? (float) $row['attributable_parts'] : 0,
+        'historical_parts'  => isset($row['historical_parts']) ? (float) $row['historical_parts'] : 0,
+        'person_days'       => isset($row['person_days']) ? (int) $row['person_days'] : 0,
     );
 }
 
@@ -1911,7 +2044,9 @@ function tlk_get_department_daily_totals_range($department, $start_date, $end_da
 
     return $wpdb->get_results($wpdb->prepare(
         "SELECT DATE(entry_date) AS production_date,
-                SUM(CAST(qty AS DECIMAL(10,2))) AS produced
+                SUM(CAST(qty AS DECIMAL(10,2))) AS produced,
+                SUM(CASE WHEN employee != 'Historical / Unassigned' THEN CAST(qty AS DECIMAL(10,2)) ELSE 0 END) AS attributable_produced,
+                SUM(CASE WHEN employee = 'Historical / Unassigned' THEN CAST(qty AS DECIMAL(10,2)) ELSE 0 END) AS historical_produced
          FROM {$production}
          WHERE department = %s
            AND entry_date BETWEEN %s AND %s
@@ -2085,6 +2220,7 @@ function tlk_get_employee_performance($department, $year, $month) {
          FROM {$production}
          WHERE department = %s AND YEAR(entry_date) = %d AND MONTH(entry_date) = %d
            AND employee IS NOT NULL AND employee != ''
+           AND employee != 'Historical / Unassigned'
          GROUP BY employee ORDER BY employee ASC",
         $department, $year, $month
     ), ARRAY_A);
@@ -2353,6 +2489,7 @@ function tlk_get_employee_performance_range($department, $start_date, $end_date)
          WHERE department = %s
            AND entry_date BETWEEN %s AND %s
            AND employee IS NOT NULL AND employee != ''
+           AND employee != 'Historical / Unassigned'
          GROUP BY employee
          ORDER BY employee ASC",
         $department, $start, $end
@@ -2381,6 +2518,7 @@ function tlk_get_production_daily_breakdown($department, $start_date, $end_date)
          WHERE department = %s
            AND entry_date BETWEEN %s AND %s
            AND employee IS NOT NULL AND employee != ''
+           AND employee != 'Historical / Unassigned'
          GROUP BY DATE(entry_date), employee
          ORDER BY production_date DESC, employee ASC",
         $department, $start_date . ' 00:00:00', $end_date . ' 23:59:59'
@@ -2399,6 +2537,7 @@ function tlk_get_production_weekly_breakdown($department, $start_date, $end_date
          WHERE department = %s
            AND entry_date BETWEEN %s AND %s
            AND employee IS NOT NULL AND employee != ''
+           AND employee != 'Historical / Unassigned'
          GROUP BY YEARWEEK(entry_date, 1), week_start, employee
          ORDER BY week_start DESC, employee ASC",
         $department, $start_date . ' 00:00:00', $end_date . ' 23:59:59'
@@ -2599,26 +2738,31 @@ function tlk_render_employee_performance_page() {
             $department_days = tlk_get_department_daily_totals_range($department, $period['start'], $period['end']);
             $person_day_stats = tlk_get_department_person_day_stats($department, $period['start'], $period['end']);
             $dept_total = $person_day_stats['total_parts'];
+            $attributable_parts = $person_day_stats['attributable_parts'];
+            $historical_parts = $person_day_stats['historical_parts'];
             $person_days = $person_day_stats['person_days'];
             $counted_days = tlk_count_production_days($department, $period['start'], $period['end']);
             $recorded_days = count($department_days);
             $dept_goal = tlk_get_department_target($department);
             $expected_total = $dept_goal * $person_days;
-            $dept_daily_avg = $person_days ? $dept_total / $person_days : 0;
+            $dept_daily_avg = $person_days ? $attributable_parts / $person_days : 0;
             $dept_daily_avg_rounded = (int) round($dept_daily_avg);
-            $pct_expected = $expected_total > 0 ? ($dept_total / $expected_total) * 100 : 0;
+            $pct_expected = $expected_total > 0 ? ($attributable_parts / $expected_total) * 100 : 0;
             $pct_daily = $dept_goal > 0 ? ($dept_daily_avg / $dept_goal) * 100 : 0;
-            $department_summaries[$department] = compact('rows','daily','weekly','department_days','dept_total','person_days','counted_days','recorded_days','dept_goal','expected_total','dept_daily_avg','pct_expected','pct_daily');
+            $department_summaries[$department] = compact('rows','daily','weekly','department_days','dept_total','attributable_parts','historical_parts','person_days','counted_days','recorded_days','dept_goal','expected_total','dept_daily_avg','pct_expected','pct_daily');
             $pct_class = tlk_performance_percent_class($pct_expected);
             ?>
             <div class="tlk-perf-card">
                 <h2><?php echo esc_html($department); ?><?php if (!tlk_department_is_visible_on_frontend($department)) : ?> <span style="font-weight:400;color:#646970;">(hidden on frontend)</span><?php endif; ?></h2>
                 <div class="tlk-perf-total"><?php echo esc_html(number_format_i18n($dept_total)); ?> <span>parts this period</span></div>
+                <?php if ($historical_parts > 0) : ?>
+                    <p style="margin:4px 0 8px;color:#646970;"><strong><?php echo esc_html(number_format_i18n($historical_parts)); ?></strong> historical/unassigned parts are included in the total above but excluded from per-person performance.</p>
+                <?php endif; ?>
                 <p class="tlk-perf-meta">
                     Expected: <strong><?php echo esc_html(number_format_i18n($expected_total)); ?></strong>
                     (<?php echo esc_html(number_format_i18n($dept_goal)); ?>/person/day × <?php echo esc_html(number_format_i18n($person_days)); ?> active person-days)<br>
                     Period vs expected: <span class="<?php echo esc_attr($pct_class); ?>"><?php echo esc_html(number_format_i18n($pct_expected, 1)); ?>%</span><br>
-                    Avg parts per person/day (Parts / Active Person-Days): <strong><?php echo esc_html(number_format_i18n($dept_daily_avg_rounded)); ?></strong>
+                    Avg parts per person/day (Assigned Parts / Active Person-Days): <strong><?php echo esc_html(number_format_i18n($dept_daily_avg_rounded)); ?></strong>
                     · Per-person daily goal: <strong><?php echo esc_html(number_format_i18n($dept_goal)); ?></strong><br>
                     <span style="color:#646970;">Exact average: <?php echo esc_html(number_format_i18n($dept_daily_avg, 2)); ?></span>
                 </p>
@@ -2652,9 +2796,11 @@ function tlk_render_employee_performance_page() {
                 <details style="margin-top:14px;">
                     <summary style="cursor:pointer;font-weight:600;">Department Daily Totals</summary>
                     <table class="widefat striped" style="margin-top:10px;">
-                        <thead><tr><th>Date</th><th>Department Total</th><th>Active Employees</th><th>Expected</th><th>% of Goal</th></tr></thead>
+                        <thead><tr><th>Date</th><th>Department Total</th><th>Historical / Unassigned</th><th>Active Employees</th><th>Expected</th><th>% of Goal</th></tr></thead>
                         <tbody><?php foreach ($department_days as $item):
                             $day_total = (float) $item['produced'];
+                            $day_attributable = (float) $item['attributable_produced'];
+                            $day_historical = (float) $item['historical_produced'];
                             $day_employees = array();
                             foreach ($daily as $daily_item) {
                                 if ($daily_item['production_date'] === $item['production_date'] && !empty($daily_item['employee'])) {
@@ -2663,10 +2809,11 @@ function tlk_render_employee_performance_page() {
                             }
                             $day_employee_count = count($day_employees);
                             $day_expected = $dept_goal * $day_employee_count;
-                            $day_percent = $day_expected > 0 ? ($day_total / $day_expected) * 100 : 0;
+                            $day_percent = $day_expected > 0 ? ($day_attributable / $day_expected) * 100 : 0;
                         ?><tr>
                             <td><?php echo esc_html(wp_date('D, M j, Y', strtotime($item['production_date']))); ?></td>
                             <td><?php echo esc_html(number_format_i18n($day_total)); ?></td>
+                            <td><?php echo $day_historical > 0 ? esc_html(number_format_i18n($day_historical)) : '&mdash;'; ?></td>
                             <td><?php echo esc_html(number_format_i18n($day_employee_count)); ?></td>
                             <td><?php echo esc_html(number_format_i18n($day_expected)); ?></td>
                             <td><?php echo esc_html(number_format_i18n($day_percent, 1)); ?>%</td>
@@ -2722,7 +2869,7 @@ function tlk_render_employee_performance_page() {
                     <button type="submit" class="button button-primary">Save Department Settings</button>
                 </div>
             </form>
-            <p style="margin:16px 0 0;color:#50575e;">Per-person goal calculation: each employee counts once for each weekday where they recorded production. Expected period output = per-person daily goal × active person-days. Multiple entries by the same employee on the same date still count as one person-day. Saturday and Sunday never count.</p>
+            <p style="margin:16px 0 0;color:#50575e;">Per-person goal calculation: each employee counts once for each weekday where they recorded production. Expected period output = per-person daily goal × active person-days. Multiple entries by the same employee on the same date still count as one person-day. Historical / Unassigned production is included in department totals but excluded from employee performance, active person-days, and per-person goal percentages. Saturday and Sunday never count.</p>
         </details>
     </div>
     <script>

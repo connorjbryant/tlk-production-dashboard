@@ -927,3 +927,23 @@ body.tlk-prod-dash .tlk-production-card--single .tlk-production-card__image {
   object-fit: cover;
   object-position: center;
 }
+/* Employee roster manager (Connor only) */
+.tlk-employee-manager {
+    margin: 18px 0 24px;
+    padding: 14px 16px;
+    border: 1px solid rgba(0,0,0,.18);
+    border-radius: 8px;
+    background: rgba(255,255,255,.7);
+}
+.tlk-employee-manager summary { cursor: pointer; }
+.tlk-employee-add-form,
+.tlk-employee-roster-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+.tlk-employee-roster-list { margin-top: 16px; }
+.tlk-employee-roster-row span:first-of-type { min-width: 180px; font-weight: 600; }
+.tlk-employee-roster-row span:nth-of-type(2) { min-width: 65px; }

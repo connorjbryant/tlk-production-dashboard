@@ -46,6 +46,8 @@ $building_percent = min(100, (int) round($building_performance['percent']));
 
 /* Employee select */
 $select_employee = tlk_select_employee();
+$can_manage_employee_roster = tlk_can_manage_employee_roster();
+$employee_roster = $can_manage_employee_roster ? tlk_get_employee_roster(false) : array();
 
 /* Current user's entries that are still inside the 24-hour edit window. */
 $editable_entries = tlk_get_current_user_editable_entries();
@@ -67,11 +69,11 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
         'connor@flexrockperformance.com',
         'josh@tlkprecision.com',
         'brian@tlkprecision.com',
+        'brianj@tlkprecision.com',
         'todd@tlkprecision.com',
         'deric@tlkprecision.com',
     );
 
-    $can_add_employee = (strtolower((string) $current_user->user_email) === 'connor@flexrockperformance.com');
 
     $is_allowed_user = is_user_logged_in() && in_array(strtolower((string) $current_user->user_email), $allowed_emails, true);
 
@@ -85,6 +87,36 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
     <div class="dash-container__form">
         <h1>Production Entry Log</h1>
         <p>Add everyone who worked in the department, then save all entries at once.</p>
+
+        <?php if ($can_manage_employee_roster): ?>
+        <details class="tlk-employee-manager" <?php echo isset($_GET['tlk_employee_saved']) ? 'open' : ''; ?>>
+            <summary><strong>Manage Employees</strong></summary>
+            <p>Add employees without creating a production entry. Inactive employees remain in historical reports but are hidden from new-entry dropdowns.</p>
+
+            <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="tlk-employee-add-form">
+                <input type="hidden" name="action" value="tlk_add_employee_roster">
+                <?php wp_nonce_field('tlk_manage_employee_roster'); ?>
+                <label>Employee name: <input type="text" name="employee_name" required></label>
+                <button type="submit">Add Employee</button>
+            </form>
+
+            <?php if ($employee_roster): ?>
+                <div class="tlk-employee-roster-list">
+                    <?php foreach ($employee_roster as $roster_employee): ?>
+                        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" class="tlk-employee-roster-row">
+                            <input type="hidden" name="action" value="tlk_toggle_employee_roster">
+                            <input type="hidden" name="employee_id" value="<?php echo absint($roster_employee->id); ?>">
+                            <input type="hidden" name="active" value="<?php echo $roster_employee->active ? '0' : '1'; ?>">
+                            <?php wp_nonce_field('tlk_manage_employee_roster'); ?>
+                            <span><?php echo esc_html($roster_employee->employee_name); ?></span>
+                            <span><?php echo $roster_employee->active ? 'Active' : 'Inactive'; ?></span>
+                            <button type="submit"><?php echo $roster_employee->active ? 'Deactivate' : 'Reactivate'; ?></button>
+                        </form>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </details>
+        <?php endif; ?>
 
         <form action="<?php echo esc_url(admin_url('admin-post.php')); ?>" method="POST">
             <input type="hidden" name="action" value="save_custom_get_data">
@@ -125,17 +157,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                                     <?php echo esc_html($employee); ?>
                                 </option>
                             <?php endforeach; ?>
-                            <?php if ($can_add_employee): ?>
-                            <option value="__new__">+ Add new employee</option>
-                            <?php endif; ?>
                         </select>
-                        <input
-                            type="text"
-                            name="new_employee[]"
-                            class="production-new-employee"
-                            placeholder="New employee name"
-                            style="display:none;"
-                        >
                     </div>
 
                     <div class="production-entry-field">
@@ -162,17 +184,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                                 <?php echo esc_html($employee); ?>
                             </option>
                         <?php endforeach; ?>
-                        <?php if ($can_add_employee): ?>
-                            <option value="__new__">+ Add new employee</option>
-                        <?php endif; ?>
                     </select>
-                    <input
-                        type="text"
-                        name="new_employee[]"
-                        class="production-new-employee"
-                        placeholder="New employee name"
-                        style="display:none;"
-                    >
                 </div>
 
                 <div class="production-entry-field">
