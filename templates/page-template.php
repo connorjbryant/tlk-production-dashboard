@@ -386,7 +386,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
 
                     <div class="tlk-production-card__number">
                         <?php echo esc_html(number_format_i18n($department['quota']['total'])); ?>
-                        <h3>Average Parts per Day</h3>
+                        <h3>Average Parts per Person / Day</h3>
                     </div>
 
                     <div class="tlk-production-card__bottom">

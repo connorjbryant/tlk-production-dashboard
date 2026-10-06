@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 3.4.2
+ * Version: 3.4.3
  * Author: Connor Bryant
  * License: GPL-2.0+
  */
@@ -24,7 +24,7 @@ function tlk_dash_enqueue_assets(){
         return;
     }
 
-    $version = '3.4.2';
+    $version = '3.4.3';
 
     wp_enqueue_style(
         'tlk_dash_styles',
@@ -1850,13 +1850,12 @@ function tlk_count_production_days($department, $start_date, $end_date) {
 /**
  * Frontend production metric for the current month.
  *
- * The department goal is a TOTAL daily goal across everyone in that department.
- * Monday-Thursday are required production days. Friday is optional and only counts
- * when that department has production recorded on Friday. Saturday/Sunday never count.
+ * The department goal is a PER-PERSON daily goal. A person-day is counted when
+ * an employee has production recorded for that department on that weekday.
+ * Department performance is therefore total parts / total active person-days.
  *
- * Example: Monday Joe 30 + Bob 25 = department total 55.
- * Tuesday Joe 35 + Bob 30 = department total 65.
- * Month-to-date department daily average = (55 + 65) / 2 = 60.
+ * Example: Monday Joe 30 + Bob 30 = 60 parts across 2 person-days = 30/person.
+ * If the per-person goal is 60, that day is at 50% of goal.
  */
 function tlk_get_department_daily_average($department, $year = null, $month = null) {
     global $wpdb;
@@ -1872,29 +1871,35 @@ function tlk_get_department_daily_average($department, $year = null, $month = nu
     $range_end_obj = $month_end_obj < $today_obj ? $month_end_obj : $today_obj;
     $range_end = $range_end_obj->format('Y-m-d');
 
-    $daily_rows = $wpdb->get_results(
-        $wpdb->prepare(
-            "SELECT DATE(entry_date) AS production_date,
-                    SUM(CAST(qty AS DECIMAL(10,2))) AS department_day_total
-             FROM {$table_name}
-             WHERE department = %s
-               AND entry_date BETWEEN %s AND %s
-               AND WEEKDAY(entry_date) BETWEEN 0 AND 4
-             GROUP BY DATE(entry_date)",
-            $department,
-            $month_start . ' 00:00:00',
-            $range_end . ' 23:59:59'
-        ),
-        ARRAY_A
+    $stats = tlk_get_department_person_day_stats($department, $month_start, $range_end);
+    return $stats['person_days'] > 0 ? $stats['total_parts'] / $stats['person_days'] : 0;
+}
+
+/**
+ * Return total production and active employee-days for a department/range.
+ * Multiple entries by the same employee on the same date count as one person-day.
+ */
+function tlk_get_department_person_day_stats($department, $start_date, $end_date) {
+    global $wpdb;
+    $production = $wpdb->prefix . 'tlk_production';
+
+    $row = $wpdb->get_row($wpdb->prepare(
+        "SELECT COALESCE(SUM(CAST(qty AS DECIMAL(10,2))), 0) AS total_parts,
+                COUNT(DISTINCT CONCAT(DATE(entry_date), '|', employee)) AS person_days
+         FROM {$production}
+         WHERE department = %s
+           AND entry_date BETWEEN %s AND %s
+           AND WEEKDAY(entry_date) BETWEEN 0 AND 4
+           AND employee IS NOT NULL AND employee != ''",
+        $department,
+        $start_date . ' 00:00:00',
+        $end_date . ' 23:59:59'
+    ), ARRAY_A);
+
+    return array(
+        'total_parts' => isset($row['total_parts']) ? (float) $row['total_parts'] : 0,
+        'person_days' => isset($row['person_days']) ? (int) $row['person_days'] : 0,
     );
-
-    $total = 0;
-    foreach ($daily_rows as $row) {
-        $total += (float) $row['department_day_total'];
-    }
-
-    $production_days = tlk_count_production_days($department, $month_start, $range_end);
-    return $production_days > 0 ? $total / $production_days : 0;
 }
 
 /**
@@ -1929,22 +1934,22 @@ function tlk_department_quota($department) {
     );
 }
 
-/* CNC average production per employee this month */
+/* CNC average production per active employee-day this month */
 function cnc_quota() {
     return tlk_department_quota('CNC');
 }
 
-/* Pouring average production per employee this month */
+/* Pouring average production per active employee-day this month */
 function pouring_quota() {
     return tlk_department_quota('Pouring');
 }
 
-/* Building average production per employee this month */
+/* Building average production per active employee-day this month */
 function building_quota() {
     return tlk_department_quota('Building');
 }
 /**
- * Department-level DAILY TOTAL goals used by the frontend department-output metric.
+ * Department-level PER-PERSON DAILY goals used by the frontend production metric.
  * Stored in wp_options so they can be edited without changing PHP.
  */
 function tlk_get_department_targets() {
@@ -2358,8 +2363,8 @@ function tlk_get_employee_performance_range($department, $start_date, $end_date)
         $row['active_days'] = (int) $row['active_days'];
         $row['daily_average'] = $row['active_days'] > 0 ? $row['produced'] / $row['active_days'] : 0;
         $row['target'] = tlk_get_employee_target($row['employee'], $department, 60);
-        $row['workdays'] = tlk_count_production_days($department, $start_date, $end_date);
-        $row['expected'] = $row['target'] * $row['workdays'];
+        $row['workdays'] = $row['active_days'];
+        $row['expected'] = $row['target'] * $row['active_days'];
         $row['percent'] = $row['expected'] > 0 ? ($row['produced'] / $row['expected']) * 100 : 0;
     }
     unset($row);
@@ -2484,7 +2489,7 @@ function tlk_render_employee_performance_page() {
     </style>
     <div class="wrap tlk-perf-wrap">
         <h1>Employee Performance</h1>
-        <p class="tlk-perf-lede">Period totals versus expected output (daily goal × counted production days). Monday–Thursday always count; Friday counts only when that department recorded production; weekends never count. <a href="#tlk-counting-rules">View settings</a></p>
+        <p class="tlk-perf-lede">Period totals versus expected output using a per-person daily goal. Each employee counts once for each weekday where they recorded production; weekends never count. <a href="#tlk-counting-rules">View settings</a></p>
         <p><a href="/tlk-production-dashboard">Go To Dashboard Overview</a></p>
 
         <div class="card" style="margin:18px 0;padding:18px 22px;">
@@ -2592,16 +2597,18 @@ function tlk_render_employee_performance_page() {
             $daily = tlk_get_production_daily_breakdown($department, $period['start'], $period['end']);
             $weekly = tlk_get_production_weekly_breakdown($department, $period['start'], $period['end']);
             $department_days = tlk_get_department_daily_totals_range($department, $period['start'], $period['end']);
-            $dept_total = array_sum(array_map(function($item){ return (float) $item['produced']; }, $department_days));
+            $person_day_stats = tlk_get_department_person_day_stats($department, $period['start'], $period['end']);
+            $dept_total = $person_day_stats['total_parts'];
+            $person_days = $person_day_stats['person_days'];
             $counted_days = tlk_count_production_days($department, $period['start'], $period['end']);
             $recorded_days = count($department_days);
             $dept_goal = tlk_get_department_target($department);
-            $expected_total = $dept_goal * $counted_days;
-            $dept_daily_avg = $counted_days ? $dept_total / $counted_days : 0;
+            $expected_total = $dept_goal * $person_days;
+            $dept_daily_avg = $person_days ? $dept_total / $person_days : 0;
             $dept_daily_avg_rounded = (int) round($dept_daily_avg);
             $pct_expected = $expected_total > 0 ? ($dept_total / $expected_total) * 100 : 0;
             $pct_daily = $dept_goal > 0 ? ($dept_daily_avg / $dept_goal) * 100 : 0;
-            $department_summaries[$department] = compact('rows','daily','weekly','department_days','dept_total','counted_days','recorded_days','dept_goal','expected_total','dept_daily_avg','pct_expected','pct_daily');
+            $department_summaries[$department] = compact('rows','daily','weekly','department_days','dept_total','person_days','counted_days','recorded_days','dept_goal','expected_total','dept_daily_avg','pct_expected','pct_daily');
             $pct_class = tlk_performance_percent_class($pct_expected);
             ?>
             <div class="tlk-perf-card">
@@ -2609,10 +2616,10 @@ function tlk_render_employee_performance_page() {
                 <div class="tlk-perf-total"><?php echo esc_html(number_format_i18n($dept_total)); ?> <span>parts this period</span></div>
                 <p class="tlk-perf-meta">
                     Expected: <strong><?php echo esc_html(number_format_i18n($expected_total)); ?></strong>
-                    (<?php echo esc_html(number_format_i18n($dept_goal)); ?>/day × <?php echo esc_html(number_format_i18n($counted_days)); ?> counted days)<br>
+                    (<?php echo esc_html(number_format_i18n($dept_goal)); ?>/person/day × <?php echo esc_html(number_format_i18n($person_days)); ?> active person-days)<br>
                     Period vs expected: <span class="<?php echo esc_attr($pct_class); ?>"><?php echo esc_html(number_format_i18n($pct_expected, 1)); ?>%</span><br>
-                    Avg parts per day (Parts / Counted Days): <strong><?php echo esc_html(number_format_i18n($dept_daily_avg_rounded)); ?></strong>
-                    · Daily goal: <strong><?php echo esc_html(number_format_i18n($dept_goal)); ?></strong><br>
+                    Avg parts per person/day (Parts / Active Person-Days): <strong><?php echo esc_html(number_format_i18n($dept_daily_avg_rounded)); ?></strong>
+                    · Per-person daily goal: <strong><?php echo esc_html(number_format_i18n($dept_goal)); ?></strong><br>
                     <span style="color:#646970;">Exact average: <?php echo esc_html(number_format_i18n($dept_daily_avg, 2)); ?></span>
                 </p>
             </div>
@@ -2645,11 +2652,23 @@ function tlk_render_employee_performance_page() {
                 <details style="margin-top:14px;">
                     <summary style="cursor:pointer;font-weight:600;">Department Daily Totals</summary>
                     <table class="widefat striped" style="margin-top:10px;">
-                        <thead><tr><th>Date</th><th>Department Total</th><th>Daily Goal</th><th>% of Daily Goal</th></tr></thead>
-                        <tbody><?php foreach ($department_days as $item): $day_total = (float) $item['produced']; $day_percent = $dept_goal > 0 ? ($day_total / $dept_goal) * 100 : 0; ?><tr>
+                        <thead><tr><th>Date</th><th>Department Total</th><th>Active Employees</th><th>Expected</th><th>% of Goal</th></tr></thead>
+                        <tbody><?php foreach ($department_days as $item):
+                            $day_total = (float) $item['produced'];
+                            $day_employees = array();
+                            foreach ($daily as $daily_item) {
+                                if ($daily_item['production_date'] === $item['production_date'] && !empty($daily_item['employee'])) {
+                                    $day_employees[$daily_item['employee']] = true;
+                                }
+                            }
+                            $day_employee_count = count($day_employees);
+                            $day_expected = $dept_goal * $day_employee_count;
+                            $day_percent = $day_expected > 0 ? ($day_total / $day_expected) * 100 : 0;
+                        ?><tr>
                             <td><?php echo esc_html(wp_date('D, M j, Y', strtotime($item['production_date']))); ?></td>
                             <td><?php echo esc_html(number_format_i18n($day_total)); ?></td>
-                            <td><?php echo esc_html(number_format_i18n($dept_goal)); ?></td>
+                            <td><?php echo esc_html(number_format_i18n($day_employee_count)); ?></td>
+                            <td><?php echo esc_html(number_format_i18n($day_expected)); ?></td>
                             <td><?php echo esc_html(number_format_i18n($day_percent, 1)); ?>%</td>
                         </tr><?php endforeach; ?></tbody>
                     </table>
@@ -2684,14 +2703,14 @@ function tlk_render_employee_performance_page() {
 
         <details id="tlk-counting-rules" class="card tlk-perf-settings" style="padding:18px 22px;">
             <summary style="cursor:pointer;font-weight:600;">Settings &amp; Counting Rules</summary>
-            <p>Set each department's daily goal and choose whether its production statistics card is shown on the frontend. Hiding a department does not delete its production history or prevent new production entries.</p>
+            <p>Set each department's per-person daily goal and choose whether its production statistics card is shown on the frontend. Hiding a department does not delete its production history or prevent new production entries.</p>
             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
                 <input type="hidden" name="action" value="tlk_save_department_targets">
                 <?php wp_nonce_field('tlk_save_department_targets'); ?>
                 <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end;">
                     <?php foreach ($departments as $target_department) : ?>
                         <div style="min-width:190px;">
-                            <label><strong><?php echo esc_html($target_department); ?> Department Daily Goal</strong><br>
+                            <label><strong><?php echo esc_html($target_department); ?> Per-Person Daily Goal</strong><br>
                                 <input type="number" min="0" step="1" name="department_targets[<?php echo esc_attr($target_department); ?>]" value="<?php echo esc_attr($department_targets[$target_department]); ?>" style="width:120px;">
                             </label>
                             <label style="display:block;margin-top:10px;">
@@ -2703,7 +2722,7 @@ function tlk_render_employee_performance_page() {
                     <button type="submit" class="button button-primary">Save Department Settings</button>
                 </div>
             </form>
-            <p style="margin:16px 0 0;color:#50575e;">Counted days: Monday–Thursday always count in the selected range. Friday counts only if that department logged production. Saturday and Sunday never count. Expected period output = daily goal × counted days. Average per counted day uses those same counted days, including any empty Monday–Thursday.</p>
+            <p style="margin:16px 0 0;color:#50575e;">Per-person goal calculation: each employee counts once for each weekday where they recorded production. Expected period output = per-person daily goal × active person-days. Multiple entries by the same employee on the same date still count as one person-day. Saturday and Sunday never count.</p>
         </details>
     </div>
     <script>
