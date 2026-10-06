@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 3.4.6
+ * Version: 3.4.7
  * Author: Connor Bryant
  * License: GPL-2.0+
  */
@@ -24,7 +24,7 @@ function tlk_dash_enqueue_assets(){
         return;
     }
 
-    $version = '3.4.6';
+    $version = '3.4.7';
 
     wp_enqueue_style(
         'tlk_dash_styles',
@@ -1913,15 +1913,23 @@ function custom_login_redirect($redirect_to, $request, $user) {
         'deric@tlkprecision.com',
     );
 
-    if (
-        !empty($user->user_email) &&
-        in_array(
-            $user->user_email,
-            $allowed_emails,
-            true
-        )
-    ) {
-        return home_url('/tlk-production-dashboard/');
+    if (!empty($user->user_email)) {
+        $email = strtolower((string) $user->user_email);
+
+        // Brian gets a one-time destination chooser immediately after login.
+        // Choosing Production Dashboard removes the query string and loads the
+        // normal dashboard, so there is no redirect loop.
+        if ($email === 'brian@tlkprecision.com') {
+            return add_query_arg(
+                'tlk_choose_destination',
+                '1',
+                home_url('/tlk-production-dashboard/')
+            );
+        }
+
+        if (in_array($email, $allowed_emails, true)) {
+            return home_url('/tlk-production-dashboard/');
+        }
     }
 
     return $redirect_to;

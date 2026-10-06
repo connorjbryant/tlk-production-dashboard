@@ -14,6 +14,36 @@ if ( post_password_required() ) {
 
 get_header();
 
+/*
+ * Brian's post-login destination chooser.
+ * This is intentionally shown only when the login redirect adds the query
+ * parameter; visiting the production dashboard normally still opens it.
+ */
+$current_user = wp_get_current_user();
+$is_brian_destination_choice = (
+    is_user_logged_in()
+    && strtolower((string) $current_user->user_email) === 'brian@tlkprecision.com'
+    && isset($_GET['tlk_choose_destination'])
+    && sanitize_text_field(wp_unslash($_GET['tlk_choose_destination'])) === '1'
+);
+
+if ($is_brian_destination_choice) {
+    ?>
+    <main class="tlk-destination-choice">
+        <div class="tlk-destination-choice__card">
+            <h1>Where would you like to go?</h1>
+            <p>Choose the page you would like to open.</p>
+            <div class="tlk-destination-choice__actions">
+                <a class="tlk-destination-choice__button" href="<?php echo esc_url(home_url('/standard-price-list/')); ?>">Standard Price List</a>
+                <a class="tlk-destination-choice__button" href="<?php echo esc_url(home_url('/tlk-production-dashboard/')); ?>">Production Dashboard</a>
+            </div>
+        </div>
+    </main>
+    <?php
+    get_footer();
+    exit;
+}
+
 // Eventually remove this once the real hostinger cron is in place
 // $sync_result = tlk_sync_schedule_to_database();
 

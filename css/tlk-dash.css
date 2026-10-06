@@ -110,12 +110,24 @@ body:not(.logged-in).tlk-prod-dash .site-content {
 }
 
 /* Fixed typography: no viewport-based font scaling. */
-.dash-container h1 { font-size: 44px; }
-.dash-container h2 { font-size: 38px; }
-.dash-container h3 { font-size: 32px; }
-.dash-container h4 { font-size: 28px; }
-.dash-container h5 { font-size: 26px; }
-.dash-container h6 { font-size: 24px; }
+.dash-container h1 {
+  font-size: 44px;
+}
+.dash-container h2 {
+  font-size: 38px;
+}
+.dash-container h3 {
+  font-size: 32px;
+}
+.dash-container h4 {
+  font-size: 28px;
+}
+.dash-container h5 {
+  font-size: 26px;
+}
+.dash-container h6 {
+  font-size: 24px;
+}
 .dash-container p,
 .dash-container li,
 .dash-container td,
@@ -908,7 +920,9 @@ body.tlk-prod-dash .tlk-production-card--single .tlk-production-card__bottom {
 }
 
 /* RIGHT HALF */
-body.tlk-prod-dash .tlk-production-card--single .tlk-production-card__image-wrap {
+body.tlk-prod-dash
+  .tlk-production-card--single
+  .tlk-production-card__image-wrap {
   display: block !important;
 
   width: 40% !important;
@@ -929,21 +943,88 @@ body.tlk-prod-dash .tlk-production-card--single .tlk-production-card__image {
 }
 /* Employee roster manager (Connor only) */
 .tlk-employee-manager {
-    margin: 18px 0 24px;
-    padding: 14px 16px;
-    border: 1px solid rgba(0,0,0,.18);
-    border-radius: 8px;
-    background: rgba(255,255,255,.7);
+  margin: 18px 0 24px;
+  padding: 14px 16px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
 }
-.tlk-employee-manager summary { cursor: pointer; }
+.tlk-employee-manager summary {
+  cursor: pointer;
+}
 .tlk-employee-add-form,
 .tlk-employee-roster-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
 }
-.tlk-employee-roster-list { margin-top: 16px; }
-.tlk-employee-roster-row span:first-of-type { min-width: 180px; font-weight: 600; }
-.tlk-employee-roster-row span:nth-of-type(2) { min-width: 65px; }
+.tlk-employee-roster-list {
+  margin-top: 16px;
+}
+.tlk-employee-roster-row span:first-of-type {
+  min-width: 180px;
+  font-weight: 600;
+}
+.tlk-employee-roster-row span:nth-of-type(2) {
+  min-width: 65px;
+}
+
+/* Brian post-login destination chooser */
+.tlk-destination-choice {
+  min-height: 70vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+.tlk-destination-choice__card {
+  width: min(680px, 100%);
+  padding: 40px;
+  border: 1px solid #d9d9d9;
+  border-radius: 12px;
+  text-align: center;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+}
+
+.tlk-destination-choice__card h1 {
+  margin-top: 0;
+}
+
+.tlk-destination-choice__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 28px;
+}
+
+.tlk-destination-choice__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 72px;
+  padding: 16px 20px;
+  border-radius: 8px;
+  background: #1d2327;
+  color: #fff !important;
+  font-weight: 700;
+  text-decoration: none !important;
+}
+
+.tlk-destination-choice__button:hover,
+.tlk-destination-choice__button:focus {
+  opacity: 0.88;
+}
+
+@media (max-width: 600px) {
+  .tlk-destination-choice__card {
+    padding: 28px 20px;
+  }
+
+  .tlk-destination-choice__actions {
+    grid-template-columns: 1fr;
+  }
+}
