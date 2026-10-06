@@ -90,6 +90,39 @@ jQuery(document).ready(function ($) {
         $dashboard.css('background-position', 'calc(50% + ' + shift[0] + 'px) calc(50% + ' + shift[1] + 'px)');
     }
 
+    /*
+     * Screen Wake Lock API.
+     * Supported browsers can ask the device to keep the display awake while this
+     * dashboard is visible. Browsers may release the lock when the page is hidden,
+     * so request it again when the dashboard becomes visible. Unsupported browsers
+     * simply continue using the refresh/pixel-shift helpers above.
+     */
+    var dashboardWakeLock = null;
+
+    async function requestDashboardWakeLock() {
+        if (!('wakeLock' in navigator) || document.visibilityState !== 'visible') {
+            return;
+        }
+
+        try {
+            dashboardWakeLock = await navigator.wakeLock.request('screen');
+            dashboardWakeLock.addEventListener('release', function () {
+                dashboardWakeLock = null;
+            });
+        } catch (error) {
+            // Wake Lock can be unavailable/denied without affecting the dashboard.
+            dashboardWakeLock = null;
+        }
+    }
+
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible' && !dashboardWakeLock) {
+            requestDashboardWakeLock();
+        }
+    });
+
+    requestDashboardWakeLock();
+
     window.setTimeout(refreshDashboardWhenIdle, refreshEveryMs);
     window.setInterval(shiftDashboardPixels, pixelShiftEveryMs);
 
