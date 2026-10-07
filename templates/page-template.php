@@ -159,8 +159,8 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                     <label for="department">Department:</label>
 
                     <select name="department" id="department" required>
-                        <option value="CNC">CNC</option>
                         <option value="Pouring">Pouring</option>
+                        <option value="CNC">CNC</option>
                         <option value="Building">Building</option>
                     </select>
                 </div>
