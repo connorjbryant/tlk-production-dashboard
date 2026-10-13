@@ -23,7 +23,7 @@
   --tlk-good-bg: #ecffe9;
   --tlk-bad: #d32626;
   --tlk-bad-bg: #ffe9e9;
-  --tlk-warn: #f5a000;
+  --tlk-warn: #ff6600;
   --tlk-warn-bg: #fff8e9;
   --tlk-notice-border: #b7d7a8;
   --tlk-notice-bg: #f1f8ed;
@@ -1026,5 +1026,38 @@ body.tlk-prod-dash .tlk-production-card--single .tlk-production-card__image {
 
   .tlk-destination-choice__actions {
     grid-template-columns: 1fr;
+  }
+}
+/* ---------------------------------------------------------
+   TV ambient white grid-gap pulse (visual activity experiment)
+   The animated background is visible only in the 24px grid
+   gutters; opaque cards remain unchanged. No JS or inputs.
+   --------------------------------------------------------- */
+.tlk-prod-dash .tlk-production-grid,
+.tlk-prod-dash .tlk-order-grid {
+  background-image: linear-gradient(
+    110deg,
+    transparent 0%,
+    transparent 35%,
+    rgba(255, 255, 255, 0.96) 48%,
+    #ffffff 50%,
+    rgba(255, 255, 255, 0.96) 52%,
+    transparent 65%,
+    transparent 100%
+  );
+  background-size: 250% 250%;
+  background-position: 100% 50%;
+  animation: tlk-grid-white-pulse 24s linear infinite;
+}
+
+@keyframes tlk-grid-white-pulse {
+  0%   { background-position: 100% 50%; }
+  100% { background-position: -100% 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tlk-prod-dash .tlk-production-grid,
+  .tlk-prod-dash .tlk-order-grid {
+    animation: none;
   }
 }

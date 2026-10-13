@@ -174,6 +174,49 @@ jQuery(document).ready(function ($) {
 
     updateRemoveButtons();
 
+    // TV display experiment: change the main dashboard background at irregular
+    // intervals without touching production data, forms, or department photos.
+    (function startDashboardBackgroundShuffle() {
+        var dashboard = document.querySelector('.dash-container');
+        if (!dashboard) return;
+
+        var imageBase = '/wp-content/plugins/tlk-production-dashboard/images/';
+        var images = ['building.jpg', 'cnc.jpg', 'pouring.jpg'];
+        var current = null;
+        var timer = null;
+
+        // Preload once so a transition does not show a blank background.
+        images.forEach(function (filename) {
+            var preload = new Image();
+            preload.src = imageBase + filename;
+        });
+
+        function scheduleNext() {
+            // Random 8-16 minute interval; no repeated selection back-to-back.
+            var delay = (2 + Math.random() * 2) * 60 * 1000;
+            timer = window.setTimeout(changeBackground, delay);
+        }
+
+        function changeBackground() {
+            if (document.visibilityState === 'hidden') {
+                scheduleNext();
+                return;
+            }
+            var candidates = images.filter(function (filename) {
+                return filename !== current;
+            });
+            var next = candidates[Math.floor(Math.random() * candidates.length)];
+            current = next;
+            dashboard.style.backgroundImage = 'url("' + imageBase + next + '")';
+            scheduleNext();
+        }
+
+        changeBackground(); // Randomize immediately when the dashboard loads.
+        window.addEventListener('pagehide', function () {
+            if (timer) window.clearTimeout(timer);
+        });
+    })();
+
     window.testMonth = function (month) {
         $('.dash-container').css(
             'background-image',
