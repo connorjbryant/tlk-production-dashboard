@@ -181,8 +181,9 @@ jQuery(document).ready(function ($) {
         if (!dashboard) return;
 
         var imageBase = '/wp-content/plugins/tlk-production-dashboard/images/';
-        var images = ['building.jpg', 'cnc.jpg', 'pouring.jpg'];
-        var current = null;
+        var monthImage = (new Date().getMonth() + 1) + '.jpg';
+        var images = ['building.jpg', 'pouring.jpg', monthImage];
+        var current = monthImage;
         var timer = null;
 
         // Preload once so a transition does not show a blank background.
