@@ -2,8 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 3.5.5
- * Author: Connor Bryant
+ * Version: 3.5.8
  * License: GPL-2.0+
  */
 
@@ -24,7 +23,7 @@ function tlk_dash_enqueue_assets(){
         return;
     }
 
-    $version = '3.5.5';
+    $version = '3.5.8';
 
     wp_enqueue_style(
         'tlk_dash_styles',

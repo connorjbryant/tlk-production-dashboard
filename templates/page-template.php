@@ -384,10 +384,27 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
     <?php } ?>
 
     <section class="tlk-stats-section">
-        <h1 class="tlk-stats-title">
-            Production Statistics by Department
-            <span>(<?php echo esc_html($current_period); ?>)</span>
-        </h1>
+        <div class="tlk-stats-video-header">
+            <video
+                class="tlk-stats-motion-strip"
+                autoplay
+                muted
+                loop
+                playsinline
+                preload="metadata"
+                aria-hidden="true"
+            >
+                <source
+                    src="<?php echo esc_url(plugin_dir_url(dirname(__FILE__)) . 'videos/work.mp4'); ?>"
+                    type="video/mp4"
+                >
+            </video>
+
+            <h1 class="tlk-stats-title" style="margin: 0 !important; background: rgba(35, 35, 35, 0.75);">
+                Production Statistics by Department
+                <span>(<?php echo esc_html($current_period); ?>)</span>
+            </h1>
+        </div>
 
         <div class="tlk-production-grid">
             <?php
