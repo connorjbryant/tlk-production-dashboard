@@ -133,7 +133,7 @@ jQuery(document).ready(function ($) {
         var dept = $('#department').val();
         var index = $('#production-entry-list .production-entry-row').index($row);
         var parts = (entrySettings.parts || {})[dept] || [];
-        var $line = $('<div class="tlk-part-line"><input type="text" class="tlk-part-name" placeholder="Recess member, button, chamfer, etc. name" required><input type="number" class="tlk-part-qty" min="0" placeholder="0" required><button type="button" class="tlk-remove-part" aria-label="Remove part">×</button></div>');
+        var $line = $('<div class="tlk-part-line"><input type="text" class="tlk-part-name" placeholder="Recess member, button, chamfer, etc. name" required><input type="number" class="tlk-part-qty" min="0" placeholder="0" required><button type="button" class="tlk-remove-part" aria-label="Remove part" data-tooltip="Remove last part">×</button></div>');
         $line.find('.tlk-part-name').attr('name','part_name['+index+'][]').attr('list','tlk-part-options');
         $line.find('.tlk-part-qty').attr('name','part_qty['+index+'][]');
         $row.find('.tlk-part-lines').append($line);

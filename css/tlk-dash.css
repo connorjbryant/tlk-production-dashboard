@@ -1162,6 +1162,58 @@ body.tlk-prod-dash .tlk-production-card--single .tlk-production-card__image {
   cursor: pointer;
   font-weight: 600;
 }
+
+.tlk-remove-part {
+  position: relative;
+}
+
+.tlk-remove-part::before {
+  content: "";
+  position: absolute;
+  bottom: 95%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: #333;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.tlk-remove-part::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  width: 9ch;
+  transform: translateX(-50%);
+  background: #333;
+  color: #fff;
+  padding: 2px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.3;
+  white-space: normal;
+  overflow-wrap: break-word;
+  text-align: center;
+  pointer-events: none;
+  opacity: 1;
+  visibility: visible;
+  z-index: 101;
+}
+
+/* Hide tooltips on all remove-part buttons */
+.tlk-remove-part::before,
+.tlk-remove-part::after {
+  display: none;
+}
+
+/* Show tooltip only on the first part row */
+.tlk-part-lines .tlk-part-line:first-child .tlk-remove-part::before,
+.tlk-part-lines .tlk-part-line:first-child .tlk-remove-part::after {
+  display: block;
+}
+
 /* Progressive enhancement: the first card remains visible without JavaScript. */
 body.tlk-prod-dash .tlk-production-grid .tlk-production-card {
   display: none !important;

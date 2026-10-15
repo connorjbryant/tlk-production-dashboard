@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 3.7.6
+ * Version: 3.7.9
  * License: GPL-2.0+
  */
 
@@ -23,7 +23,7 @@ function tlk_dash_enqueue_assets(){
         return;
     }
 
-    $version = '3.7.6';
+    $version = '3.7.9';
 
     wp_enqueue_style(
         'tlk_dash_styles',
@@ -682,6 +682,7 @@ function handle_production_form_submission() {
     $saved_parts = get_option('tlk_part_names', array());
     $part_details = array();
     foreach ($employees as $index => $employee_raw) {
+        $row_part_start = count($part_details);
         $employee = sanitize_text_field($employee_raw);
         $qty_raw  = isset($quantities[$index]) ? $quantities[$index] : '';
 
@@ -746,6 +747,15 @@ function handle_production_form_submission() {
             );
         }
 
+        // Link advanced part details to the production row they belong to.
+        // This lets reports ignore details after a row is deleted in WP Data Access.
+        if ($advanced) {
+            $production_id = (int) $wpdb->insert_id;
+            for ($detail_index = $row_part_start; $detail_index < count($part_details); $detail_index++) {
+                $part_details[$detail_index]['production_id'] = $production_id;
+                $part_details[$detail_index]['employee'] = $employee;
+            }
+        }
         $inserted++;
     }
 
@@ -2671,6 +2681,7 @@ function tlk_employee_performance_period() {
 }
 
 function tlk_render_employee_performance_page() {
+    global $wpdb;
     if (!tlk_can_manage_employee_performance()) wp_die('You are not allowed to view employee performance.');
     $departments = array('Pouring','Machining','Assembly & Packaging');
     $period = tlk_employee_performance_period();
@@ -2875,12 +2886,37 @@ function tlk_render_employee_performance_page() {
                 <?php
                 // Advanced-entry detail is stored separately from the aggregate production rows.
                 $part_history = get_option('tlk_part_entry_history', array());
+                // Build a lookup of surviving production rows. Direct WP Data Access
+                // deletions are reflected immediately without modifying stored history.
+                $production_table = $wpdb->prefix . 'tlk_production';
+                $live_rows = $wpdb->get_results(
+                    $wpdb->prepare(
+                        "SELECT id, employee, department, entry_date FROM {$production_table} WHERE department = %s AND entry_date >= %s AND entry_date < %s",
+                        $department,
+                        $period['start'] . ' 00:00:00',
+                        gmdate('Y-m-d', strtotime($period['end'] . ' +1 day')) . ' 00:00:00'
+                    ), ARRAY_A
+                );
+                $live_ids = array();
+                $legacy_keys = array();
+                foreach ((array) $live_rows as $live_row) {
+                    $live_ids[(int) $live_row['id']] = true;
+                    $legacy_keys[$live_row['department'] . "\0" . $live_row['employee'] . "\0" . $live_row['entry_date']] = true;
+                }
                 $matching_parts = array();
                 if (is_array($part_history)) {
                     foreach ($part_history as $part_entry) {
                         if (!is_array($part_entry) || ($part_entry['department'] ?? '') !== $department) { continue; }
                         $entry_day = substr((string) ($part_entry['date'] ?? ''), 0, 10);
                         if ($entry_day < $period['start'] || $entry_day > $period['end']) { continue; }
+                        if (!empty($part_entry['production_id'])) {
+                            if (!isset($live_ids[(int) $part_entry['production_id']])) { continue; }
+                        } else {
+                            // Older records predate ID linkage; match their original
+                            // department, employee and exact submission timestamp.
+                            $legacy_key = ($part_entry['department'] ?? '') . "\0" . ($part_entry['employee'] ?? '') . "\0" . ($part_entry['date'] ?? '');
+                            if (!isset($legacy_keys[$legacy_key])) { continue; }
+                        }
                         $matching_parts[] = $part_entry;
                     }
                 }
