@@ -165,8 +165,15 @@ jQuery(document).ready(function ($) {
     $('#tlk-mode-switch button').on('click', function(){entryMode=$(this).data('mode');updateEntryMode();});
     $(document).on('click','.tlk-add-part',function(){addPart($(this).closest('.production-entry-row'));});
     $(document).on('click','.tlk-remove-part',function(){var $row=$(this).closest('.production-entry-row');if($row.find('.tlk-part-line').length>1)$(this).closest('.tlk-part-line').remove();});
-    $('#department').on('change',updateEntryMode);
-    updateEntryMode();
+    // Default to Advanced whenever the selected department permits it.
+    // Employees may still manually switch back to Basic for that department.
+    function defaultDepartmentEntryMode() {
+        var dept = $('#department').val();
+        entryMode = (entrySettings.enabled || {})[dept] ? 'advanced' : 'basic';
+        updateEntryMode();
+    }
+    $('#department').on('change', defaultDepartmentEntryMode);
+    defaultDepartmentEntryMode();
     var $grid = $('.tlk-production-grid');
     var $cards = $grid.children('.tlk-production-card');
     var $dashboard = $('.dash-container');
