@@ -552,7 +552,8 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   font-weight: 700;
 }
 
-.tlk-production-card__top h2 {
+.tlk-production-card__top h2,
+.tlk-production-card__top span {
   font-size: var(--tlk-card-title);
   line-height: 1.1;
 }
@@ -1108,4 +1109,168 @@ body.tlk-prod-dash .tlk-production-card--single .tlk-production-card__image {
   .tlk-prod-dash .tlk-order-grid {
     animation: none;
   }
+}
+/* Advanced entry and rotating department cards */
+.tlk-mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0;
+  justify-content: flex-end;
+}
+.tlk-mode-switch button {
+  border: 1px solid #ccc;
+  background: #eee;
+  color: #333;
+  padding: 9px 22px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.tlk-mode-switch button.active {
+  background: #407c19;
+  color: white;
+}
+.tlk-advanced-parts {
+  flex: 1;
+  min-width: 250px;
+}
+.tlk-advanced-parts[hidden] {
+  display: none !important;
+}
+.tlk-part-line {
+  display: flex;
+  gap: 8px;
+  margin: 7px 0;
+}
+.tlk-part-name {
+  flex: 2;
+  min-width: 80px;
+}
+.tlk-part-qty {
+  flex: 1;
+  min-width: 65px;
+}
+.tlk-add-part {
+  background: transparent;
+  border: 0;
+  color: #397d18;
+  cursor: pointer;
+  font-weight: 600;
+}
+/* Progressive enhancement: the first card remains visible without JavaScript. */
+body.tlk-prod-dash .tlk-production-grid .tlk-production-card {
+  display: none !important;
+}
+body.tlk-prod-dash .tlk-production-grid .tlk-production-card:first-child {
+  display: flex !important;
+}
+body.tlk-prod-dash
+  .tlk-production-grid.tlk-rotation-ready
+  .tlk-production-card:first-child {
+  display: none !important;
+}
+body.tlk-prod-dash
+  .tlk-production-grid.tlk-rotation-ready
+  .tlk-production-card.tlk-card-active {
+  display: flex !important;
+}
+body.tlk-prod-dash .tlk-production-grid .tlk-production-card {
+  width: 100% !important;
+  grid-column: 1/-1;
+}
+.tlk-production-card.tlk-dept-machining {
+  --tlk-dept-color: #2563eb;
+}
+.tlk-production-card.tlk-dept-pouring {
+  --tlk-dept-color: #dc2626;
+}
+.tlk-production-card.tlk-dept-assembly-packaging {
+  --tlk-dept-color: #388b36;
+}
+.tlk-production-card[class*="tlk-dept-"] {
+  border-color: var(--tlk-dept-color) !important;
+}
+.tlk-production-card[class*="tlk-dept-"] .tlk-production-card__top h2 {
+  color: var(--tlk-dept-color) !important;
+}
+.tlk-production-card[class*="tlk-dept-"] .tlk-progress span {
+  background: var(--tlk-dept-color) !important;
+}
+/* Department identity is independent from performance status. */
+body.tlk-prod-dash .tlk-production-card.tlk-dept-machining {
+  --tlk-dept-color: #2563eb;
+  --tlk-dept-tint: #eaf2ff;
+}
+body.tlk-prod-dash .tlk-production-card.tlk-dept-pouring {
+  --tlk-dept-color: #dc2626;
+  --tlk-dept-tint: #fff0ef;
+}
+body.tlk-prod-dash .tlk-production-card.tlk-dept-assembly-packaging,
+body.tlk-prod-dash .tlk-production-card.tlk-dept-assembly-packaging {
+  --tlk-dept-color: #388b36;
+  --tlk-dept-tint: #ecf8eb;
+}
+body.tlk-prod-dash .tlk-production-card[class*="tlk-dept-"] {
+  background: var(--tlk-dept-tint) !important;
+  border-color: var(--tlk-dept-color) !important;
+}
+body.tlk-prod-dash
+  .tlk-production-card[class*="tlk-dept-"]
+  .tlk-production-card__content {
+  background: var(--tlk-dept-tint) !important;
+}
+body.tlk-prod-dash .tlk-production-card[class*="tlk-dept-"] .tlk-status-icon,
+body.tlk-prod-dash
+  .tlk-production-card[class*="tlk-dept-"]
+  .tlk-production-card__number,
+body.tlk-prod-dash
+  .tlk-production-card[class*="tlk-dept-"]
+  .tlk-production-card__progress-info
+  strong:last-child {
+  color: var(--tlk-dept-color) !important;
+}
+/* Quota performance is distinct from the department identity color. */
+body.tlk-prod-dash .tlk-production-card.is-good {
+  --tlk-quota-color: #25803a;
+  --tlk-quota-bg: #e5f6e9;
+}
+body.tlk-prod-dash .tlk-production-card.is-warning {
+  --tlk-quota-color: #a65c00;
+  --tlk-quota-bg: #fff0cb;
+}
+body.tlk-prod-dash .tlk-production-card.is-bad {
+  --tlk-quota-color: #c32929;
+  --tlk-quota-bg: #ffe5e5;
+}
+body.tlk-prod-dash .tlk-production-card .tlk-status-icon {
+  color: var(--tlk-quota-color) !important;
+  background: var(--tlk-quota-bg);
+  border: 2px solid var(--tlk-quota-color);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 22px;
+  line-height: 1.3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+body.tlk-prod-dash .tlk-production-card .tlk-progress span {
+  background: var(--tlk-quota-color) !important;
+}
+body.tlk-prod-dash
+  .tlk-production-card
+  .tlk-production-card__progress-info
+  strong:last-child {
+  color: var(--tlk-quota-color) !important;
+}
+body.tlk-prod-dash .tlk-production-card .tlk-quota-label {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--tlk-quota-color);
+  background: var(--tlk-quota-bg);
+  border: 1px solid var(--tlk-quota-color);
+  border-radius: 5px;
+  padding: 4px 9px;
+  white-space: nowrap;
+  z-index: 999;
 }

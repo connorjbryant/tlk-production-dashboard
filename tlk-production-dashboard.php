@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 3.5.8
+ * Version: 3.6.5
  * License: GPL-2.0+
  */
 
@@ -23,7 +23,7 @@ function tlk_dash_enqueue_assets(){
         return;
     }
 
-    $version = '3.5.8';
+    $version = '3.6.5';
 
     wp_enqueue_style(
         'tlk_dash_styles',
@@ -611,12 +611,10 @@ function tlk_normalize_legacy_department_values() {
     $wpdb->query(
         "UPDATE {$table_name}
          SET department = CASE
-             WHEN LOWER(TRIM(department)) = 'cnc' THEN 'CNC'
              WHEN LOWER(TRIM(department)) IN ('pour', 'pouring') THEN 'Pouring'
-             WHEN LOWER(TRIM(department)) IN ('build', 'building') THEN 'Building'
              ELSE department
          END
-         WHERE LOWER(TRIM(department)) IN ('cnc', 'pour', 'pouring', 'build', 'building')"
+         WHERE LOWER(TRIM(department)) IN ('pour', 'pouring')"
     );
 
     update_option('tlk_department_value_migration_189', 'done', false);
@@ -653,17 +651,21 @@ function handle_production_form_submission() {
     $department = sanitize_text_field(wp_unslash($_POST['department']));
     $employees  = (array) wp_unslash($_POST['employee']);
     $quantities = (array) wp_unslash($_POST['qty']);
+    $advanced = isset($_POST['entry_mode']) && sanitize_key(wp_unslash($_POST['entry_mode'])) === 'advanced';
+    if ($advanced && !tlk_advanced_enabled($department)) { wp_die('Advanced entry is disabled for this department.'); }
+    $part_names = isset($_POST['part_name']) ? (array) wp_unslash($_POST['part_name']) : array();
+    $part_qtys = isset($_POST['part_qty']) ? (array) wp_unslash($_POST['part_qty']) : array();
     $new_names  = isset($_POST['new_employee'])
         ? (array) wp_unslash($_POST['new_employee'])
         : array();
 
-    $allowed_departments = array('CNC', 'Pouring', 'Building');
+    $allowed_departments = array('Pouring', 'Machining', 'Assembly & Packaging');
 
     if (!in_array($department, $allowed_departments, true)) {
         wp_die('Invalid department.');
     }
 
-    if (count($employees) !== count($quantities)) {
+    if (!$advanced && count($employees) !== count($quantities)) {
         wp_die('Each employee must have a production quantity.');
     }
 
@@ -677,10 +679,26 @@ function handle_production_form_submission() {
     $entry_date = current_time('mysql');
     $inserted   = 0;
 
+    $saved_parts = get_option('tlk_part_names', array());
+    $part_details = array();
     foreach ($employees as $index => $employee_raw) {
         $employee = sanitize_text_field($employee_raw);
         $qty_raw  = isset($quantities[$index]) ? $quantities[$index] : '';
 
+        if ($advanced) {
+            $qty_raw = 0;
+            $names = isset($part_names[$index]) && is_array($part_names[$index]) ? $part_names[$index] : array();
+            $counts = isset($part_qtys[$index]) && is_array($part_qtys[$index]) ? $part_qtys[$index] : array();
+            foreach ($names as $part_index => $raw_name) {
+                $part = sanitize_text_field($raw_name);
+                $count = isset($counts[$part_index]) ? absint($counts[$part_index]) : 0;
+                if ($part === '' || !$count) { continue; }
+                $qty_raw += $count;
+                $part_details[] = array('employee' => sanitize_text_field($employee_raw), 'part' => $part, 'qty' => $count, 'date' => $entry_date, 'department' => $department);
+                if (!isset($saved_parts[$department])) { $saved_parts[$department] = array(); }
+                $saved_parts[$department][] = $part;
+            }
+        }
         if ($employee === '' || $qty_raw === '') {
             continue;
         }
@@ -731,6 +749,12 @@ function handle_production_form_submission() {
         $inserted++;
     }
 
+    if ($advanced && $inserted) {
+        $saved_parts[$department] = array_values(array_unique($saved_parts[$department]));
+        update_option('tlk_part_names', $saved_parts, false);
+        $history = get_option('tlk_part_entry_history', array());
+        update_option('tlk_part_entry_history', array_merge($history, $part_details), false);
+    }
     if ($inserted < 1) {
         wp_die('Please add at least one employee and quantity.');
     }
@@ -800,18 +824,21 @@ function tlk_handle_production_entry_update() {
     // Recent-entry edits must use the same canonical department values as
     // the main production-entry form and the reporting queries.
     $department_aliases = array(
-        'cnc'      => 'CNC',
+        'cnc'      => 'Machining',
+        'machining' => 'Machining',
         'pour'     => 'Pouring',
         'pouring'  => 'Pouring',
-        'build'    => 'Building',
-        'building' => 'Building',
+        'build'    => 'Assembly & Packaging',
+        'building' => 'Assembly & Packaging',
+        'assembly & shipping' => 'Assembly & Packaging',
+        'assembly & packaging' => 'Assembly & Packaging',
     );
     $department_key = strtolower(trim($department));
     $department = isset($department_aliases[$department_key])
         ? $department_aliases[$department_key]
         : $department;
 
-    $allowed_departments = array('CNC', 'Pouring', 'Building');
+    $allowed_departments = array('Pouring', 'Machining', 'Assembly & Packaging');
     if (!in_array($department, $allowed_departments, true)) {
         wp_die('Invalid department.');
     }
@@ -2078,7 +2105,7 @@ function tlk_department_quota($department) {
 
 /* CNC average production per active employee-day this month */
 function cnc_quota() {
-    return tlk_department_quota('CNC');
+    return tlk_department_quota('Machining');
 }
 
 /* Pouring average production per active employee-day this month */
@@ -2088,7 +2115,7 @@ function pouring_quota() {
 
 /* Building average production per active employee-day this month */
 function building_quota() {
-    return tlk_department_quota('Building');
+    return tlk_department_quota('Assembly & Packaging');
 }
 /**
  * Department-level PER-PERSON DAILY goals used by the frontend production metric.
@@ -2096,9 +2123,9 @@ function building_quota() {
  */
 function tlk_get_department_targets() {
     $defaults = array(
-        'CNC'      => 60,
-        'Pouring'  => 60,
-        'Building' => 60,
+        'Pouring' => 60,
+        'Machining' => 60,
+        'Assembly & Packaging' => 60,
     );
 
     $saved = get_option('tlk_department_targets', array());
@@ -2119,7 +2146,7 @@ function tlk_get_department_target($department) {
  * This only controls display; it does not remove production history or disable entry logging.
  */
 function tlk_get_visible_frontend_departments() {
-    $all_departments = array('CNC', 'Pouring', 'Building');
+    $all_departments = array('Pouring', 'Machining', 'Assembly & Packaging');
     $saved = get_option('tlk_visible_frontend_departments', null);
 
     // Existing installs default to showing every department until the setting is saved.
@@ -2134,6 +2161,14 @@ function tlk_department_is_visible_on_frontend($department) {
     return in_array($department, tlk_get_visible_frontend_departments(), true);
 }
 
+function tlk_advanced_enabled($department) {
+    $saved = get_option('tlk_advanced_departments', array());
+    return !empty($saved[$department]);
+}
+function tlk_saved_parts($department) {
+    $parts = get_option('tlk_part_names', array());
+    return isset($parts[$department]) && is_array($parts[$department]) ? $parts[$department] : array();
+}
 function tlk_save_department_targets() {
     if (!tlk_can_manage_employee_performance()) {
         wp_die('You are not allowed to manage department targets.');
@@ -2141,7 +2176,7 @@ function tlk_save_department_targets() {
 
     check_admin_referer('tlk_save_department_targets');
 
-    $departments = array('CNC', 'Pouring', 'Building');
+    $departments = array('Pouring', 'Machining', 'Assembly & Packaging');
     $posted = isset($_POST['department_targets']) ? (array) wp_unslash($_POST['department_targets']) : array();
     $targets = tlk_get_department_targets();
 
@@ -2158,6 +2193,11 @@ function tlk_save_department_targets() {
         : array();
     $visible_departments = array_values(array_intersect($departments, array_map('sanitize_text_field', $posted_visible)));
     update_option('tlk_visible_frontend_departments', $visible_departments, false);
+    $modes = array();
+    foreach ($departments as $dept) {
+        $modes[$dept] = !empty($_POST['advanced_departments']) && in_array($dept, (array) wp_unslash($_POST['advanced_departments']), true);
+    }
+    update_option('tlk_advanced_departments', $modes, false);
 
     wp_safe_redirect(add_query_arg(array(
         'page' => 'tlk-employee-performance',
@@ -2601,7 +2641,7 @@ function tlk_employee_performance_period() {
 
 function tlk_render_employee_performance_page() {
     if (!tlk_can_manage_employee_performance()) wp_die('You are not allowed to view employee performance.');
-    $departments = array('CNC','Pouring','Building');
+    $departments = array('Pouring','Machining','Assembly & Packaging');
     $period = tlk_employee_performance_period();
     $department_targets = tlk_get_department_targets();
     $visible_frontend_departments = tlk_get_visible_frontend_departments();
@@ -2801,6 +2841,36 @@ function tlk_render_employee_performance_page() {
                     <?php endforeach; ?></tbody>
                 </table>
 
+                <?php
+                // Advanced-entry detail is stored separately from the aggregate production rows.
+                $part_history = get_option('tlk_part_entry_history', array());
+                $matching_parts = array();
+                if (is_array($part_history)) {
+                    foreach ($part_history as $part_entry) {
+                        if (!is_array($part_entry) || ($part_entry['department'] ?? '') !== $department) { continue; }
+                        $entry_day = substr((string) ($part_entry['date'] ?? ''), 0, 10);
+                        if ($entry_day < $period['start'] || $entry_day > $period['end']) { continue; }
+                        $matching_parts[] = $part_entry;
+                    }
+                }
+                ?>
+                <?php if ($matching_parts) : ?>
+                <details style="margin-top:14px;">
+                    <summary style="cursor:pointer;font-weight:600;">What Was Produced (<?php echo esc_html(count($matching_parts)); ?> records)</summary>
+                    <table class="widefat striped" style="margin-top:10px;">
+                        <thead><tr><th>Date</th><th>Employee</th><th>Part Name</th><th>Quantity</th></tr></thead>
+                        <tbody><?php foreach ($matching_parts as $part_entry) : ?>
+                            <tr>
+                                <td><?php echo esc_html(wp_date('M j, Y', strtotime($part_entry['date']))); ?></td>
+                                <td><?php echo esc_html($part_entry['employee'] ?? ''); ?></td>
+                                <td><?php echo esc_html($part_entry['part'] ?? ''); ?></td>
+                                <td><?php echo esc_html(number_format_i18n((int) ($part_entry['qty'] ?? 0))); ?></td>
+                            </tr>
+                        <?php endforeach; ?></tbody>
+                    </table>
+                </details>
+                <?php endif; ?>
+
                 <details style="margin-top:14px;">
                     <summary style="cursor:pointer;font-weight:600;">Department Daily Totals</summary>
                     <table class="widefat striped" style="margin-top:10px;">
@@ -2872,6 +2942,7 @@ function tlk_render_employee_performance_page() {
                                 <input type="checkbox" name="visible_departments[]" value="<?php echo esc_attr($target_department); ?>" <?php checked(in_array($target_department, $visible_frontend_departments, true)); ?>>
                                 Show on frontend
                             </label>
+                            <label style="display:block;margin-top:8px;"><input type="checkbox" name="advanced_departments[]" value="<?php echo esc_attr($target_department); ?>" <?php checked(tlk_advanced_enabled($target_department)); ?>> Enable Advanced entry</label>
                         </div>
                     <?php endforeach; ?>
                     <button type="submit" class="button button-primary">Save Department Settings</button>
@@ -2881,14 +2952,23 @@ function tlk_render_employee_performance_page() {
         </details>
     </div>
     <script>
-    (function(){
-        var select = document.getElementById('tlk-range-select');
-        var custom = document.querySelectorAll('.tlk-custom-date');
-        function toggleCustom(){
-            for (var i=0;i<custom.length;i++) custom[i].style.display = select.value === 'custom' ? 'block' : 'none';
-        }
-        if (select) { select.addEventListener('change', toggleCustom); toggleCustom(); }
-    })();
+        (function ($) {
+            'use strict';
+
+            const $cards = $('.tlk-department-card');
+            let activeIndex = 0;
+
+            if ($cards.length <= 1) return;
+
+            setInterval(function () {
+                $cards.removeClass('active');
+
+                activeIndex = (activeIndex + 1) % $cards.length;
+
+                $cards.eq(activeIndex).addClass('active');
+            }, 12000);
+
+        })(jQuery);
     </script>
     <?php
 }

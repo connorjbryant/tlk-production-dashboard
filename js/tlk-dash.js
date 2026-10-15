@@ -126,6 +126,81 @@ jQuery(document).ready(function ($) {
     window.setTimeout(refreshDashboardWhenIdle, refreshEveryMs);
     window.setInterval(shiftDashboardPixels, pixelShiftEveryMs);
 
+    var settingsNode = document.getElementById('tlk-entry-settings');
+    var entrySettings = settingsNode ? JSON.parse(settingsNode.textContent) : {enabled:{},parts:{}};
+    var entryMode = 'basic';
+    function addPart($row) {
+        var dept = $('#department').val();
+        var index = $('#production-entry-list .production-entry-row').index($row);
+        var parts = (entrySettings.parts || {})[dept] || [];
+        var $line = $('<div class="tlk-part-line"><input type="text" class="tlk-part-name" placeholder="Recess member, button, chamfer, etc. name" required><input type="number" class="tlk-part-qty" min="0" placeholder="0" required><button type="button" class="tlk-remove-part" aria-label="Remove part">×</button></div>');
+        $line.find('.tlk-part-name').attr('name','part_name['+index+'][]').attr('list','tlk-part-options');
+        $line.find('.tlk-part-qty').attr('name','part_qty['+index+'][]');
+        $row.find('.tlk-part-lines').append($line);
+    }
+    function updateEntryMode() {
+        var dept = $('#department').val();
+        var allowed = !!(entrySettings.enabled || {})[dept];
+        if (!allowed) entryMode = 'basic';
+        $('#tlk-mode-switch').toggle(allowed);
+        $('#tlk-entry-mode').val(entryMode);
+        $('#tlk-mode-switch button').removeClass('active').filter('[data-mode="'+entryMode+'"]').addClass('active');
+        $('#production-entry-list .production-entry-row').each(function () {
+            var $row = $(this), advanced = entryMode === 'advanced';
+            $row.find('.tlk-advanced-parts').prop('hidden', !advanced);
+            $row.find('input[name="qty[]"]').prop('disabled', false).prop('required', !advanced).val(advanced ? '0' : '').closest('.production-entry-field').toggle(!advanced);
+            if (advanced && !$row.find('.tlk-part-line').length) addPart($row);
+            $row.find('.tlk-part-name,.tlk-part-qty').prop('disabled', !advanced);
+            $row.find('.tlk-part-line').each(function(){
+                var idx = $('#production-entry-list .production-entry-row').index($row);
+                $(this).find('.tlk-part-name').attr('name','part_name['+idx+'][]');
+                $(this).find('.tlk-part-qty').attr('name','part_qty['+idx+'][]');
+            });
+        });
+        $('#tlk-part-options').remove();
+        var $list = $('<datalist id="tlk-part-options"></datalist>');
+        ((entrySettings.parts || {})[dept] || []).forEach(function(part){$list.append($('<option>').val(part));});
+        $('body').append($list);
+    }
+    $('#tlk-mode-switch button').on('click', function(){entryMode=$(this).data('mode');updateEntryMode();});
+    $(document).on('click','.tlk-add-part',function(){addPart($(this).closest('.production-entry-row'));});
+    $(document).on('click','.tlk-remove-part',function(){var $row=$(this).closest('.production-entry-row');if($row.find('.tlk-part-line').length>1)$(this).closest('.tlk-part-line').remove();});
+    $('#department').on('change',updateEntryMode);
+    updateEntryMode();
+    var $grid = $('.tlk-production-grid');
+    var $cards = $grid.children('.tlk-production-card');
+    var $dashboard = $('.dash-container');
+    var imageBase = $dashboard.attr('data-tlk-image-base') || '';
+    var monthBackground = $dashboard.attr('data-tlk-month-image') || '';
+    // Read the image URL directly from each rendered card to avoid mismatches
+    // between department names, CSS classes, and image filenames.
+    function updateDepartmentBackground($card) {
+        if (!$dashboard.length || !$card.length) return;
+        var departmentUrl = $card.attr('data-tlk-background') || '';
+        var useMonth = !!monthBackground && Math.random() < 0.20;
+        var url = useMonth ? monthBackground : departmentUrl;
+        if (url) {
+            $dashboard[0].style.setProperty('background-image', 'url("' + url + '")', 'important');
+        }
+    }
+
+    if ($cards.length) {
+        var activeCard = 0;
+        function rotateCards() {
+            $cards.removeClass('tlk-card-active').attr('aria-hidden', 'true');
+            var $active = $cards.eq(activeCard);
+            $active.addClass('tlk-card-active').attr('aria-hidden', 'false');
+            updateDepartmentBackground($active);
+        }
+        rotateCards();
+        $grid.addClass('tlk-rotation-ready');
+        if ($cards.length > 1) {
+            window.setInterval(function () {
+                activeCard = (activeCard + 1) % $cards.length;
+                rotateCards();
+            }, 12000);
+        }
+    }
     var $departmentSelect = $('#department');
     var $departmentImage = $('#department-image');
 
@@ -159,6 +234,7 @@ jQuery(document).ready(function ($) {
 
         $('#production-entry-list').append(template.content.cloneNode(true));
         updateRemoveButtons();
+        updateEntryMode();
     });
 
     $(document).on('click', '.production-remove-row', function () {
@@ -170,53 +246,10 @@ jQuery(document).ready(function ($) {
 
         $(this).closest('.production-entry-row').remove();
         updateRemoveButtons();
+        updateEntryMode();
     });
 
     updateRemoveButtons();
-
-    // TV display experiment: change the main dashboard background at irregular
-    // intervals without touching production data, forms, or department photos.
-    (function startDashboardBackgroundShuffle() {
-        var dashboard = document.querySelector('.dash-container');
-        if (!dashboard) return;
-
-        var imageBase = '/wp-content/plugins/tlk-production-dashboard/images/';
-        var monthImage = (new Date().getMonth() + 1) + '.jpg';
-        var images = ['building.jpg', 'pouring.jpg', monthImage];
-        var current = monthImage;
-        var timer = null;
-
-        // Preload once so a transition does not show a blank background.
-        images.forEach(function (filename) {
-            var preload = new Image();
-            preload.src = imageBase + filename;
-        });
-
-        function scheduleNext() {
-            // Random 8-16 minute interval; no repeated selection back-to-back.
-            var delay = (2 + Math.random() * 2) * 60 * 1000;
-            timer = window.setTimeout(changeBackground, delay);
-        }
-
-        function changeBackground() {
-            if (document.visibilityState === 'hidden') {
-                scheduleNext();
-                return;
-            }
-            var candidates = images.filter(function (filename) {
-                return filename !== current;
-            });
-            var next = candidates[Math.floor(Math.random() * candidates.length)];
-            current = next;
-            dashboard.style.backgroundImage = 'url("' + imageBase + next + '")';
-            scheduleNext();
-        }
-
-        changeBackground(); // Randomize immediately when the dashboard loads.
-        window.addEventListener('pagehide', function () {
-            if (timer) window.clearTimeout(timer);
-        });
-    })();
 
     window.testMonth = function (month) {
         $('.dash-container').css(
@@ -230,9 +263,10 @@ jQuery(document).ready(function ($) {
     }
 
     var departmentImages = {
-        'CNC': 'cnc.jpg',
+        'Machining': 'machining.jpg',
         'Pouring': 'pouring.jpg',
-        'Building': 'building.jpg'
+        
+        'Assembly & Packaging': 'assembly-packaging.jpg'
     };
 
     function updateDepartmentImage() {
