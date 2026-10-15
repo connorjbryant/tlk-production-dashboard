@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 3.7.1
+ * Version: 3.7.2
  * License: GPL-2.0+
  */
 
@@ -23,7 +23,7 @@ function tlk_dash_enqueue_assets(){
         return;
     }
 
-    $version = '3.7.1';
+    $version = '3.7.2';
 
     wp_enqueue_style(
         'tlk_dash_styles',
@@ -1969,9 +1969,37 @@ add_filter(
 );
 
 /**
+ * TLK scheduled holidays for a given calendar year.
+ * Use the requested calendar dates (not observed substitute weekdays).
+ * Construct each date for the reporting year rather than the server's current year.
+ */
+function tlk_production_holidays_for_year($year) {
+    $year = (int) $year;
+    $tz = wp_timezone();
+    $dates = array(
+        sprintf('%04d-01-01', $year), // New Year's Day
+        (new DateTimeImmutable("last monday of May {$year}", $tz))->format('Y-m-d'),
+        (new DateTimeImmutable("first monday of September {$year}", $tz))->format('Y-m-d'),
+        (new DateTimeImmutable("fourth thursday of November {$year}", $tz))->format('Y-m-d'),
+        sprintf('%04d-12-25', $year), // Christmas
+        sprintf('%04d-12-31', $year), // New Year's Eve
+    );
+    return array_fill_keys($dates, true);
+}
+
+/** Holidays are excluded from expected production days, not deleted from logs. */
+function tlk_is_production_holiday($date) {
+    $day = $date instanceof DateTimeInterface
+        ? $date
+        : new DateTimeImmutable((string) $date, wp_timezone());
+    $holidays = tlk_production_holidays_for_year((int) $day->format('Y'));
+    return isset($holidays[$day->format('Y-m-d')]);
+}
+
+/**
  * Count required production days in an inclusive range.
- * Monday-Thursday always count. Friday counts only when the department
- * has at least one production entry that day. Saturday/Sunday never count.
+ * Monday-Thursday count except scheduled holidays. Friday counts only when
+ * the department has an entry and it is not a holiday. Weekends never count.
  */
 function tlk_count_production_days($department, $start_date, $end_date) {
     global $wpdb;
@@ -1996,6 +2024,9 @@ function tlk_count_production_days($department, $start_date, $end_date) {
 
     $count = 0;
     for ($day = $start; $day <= $end; $day = $day->modify('+1 day')) {
+        if (tlk_is_production_holiday($day)) {
+            continue;
+        }
         $day_number = (int) $day->format('N');
         if ($day_number >= 1 && $day_number <= 4) {
             $count++;
