@@ -266,7 +266,7 @@ jQuery(document).ready(function ($) {
         'Machining': 'machining.jpg',
         'Pouring': 'pouring.jpg',
         
-        'Assembly & Packaging': 'assembly-packaging.jpg'
+        'Assembly & Packaging': 'assembly_packaging.jpg'
     };
 
     function updateDepartmentImage() {

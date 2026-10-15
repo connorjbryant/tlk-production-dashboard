@@ -448,7 +448,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                     'Machining' => 'machining.jpg',
                     'Pouring' => 'pouring.jpg',
                     
-                    'Assembly & Packaging' => 'assembly-packaging.jpg',
+                    'Assembly & Packaging' => 'assembly_packaging.jpg',
                 );
                 $background_file = $background_files[$department['name']] ?? 'building.jpg';
                 $department_background_url = plugin_dir_url(dirname(__FILE__)) . 'images/' . $background_file;
@@ -485,7 +485,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                     </div>
 
                     <?php if ($single_department_card) : ?>
-                        <?php $department_image = $department['name'] === 'Machining' ? 'machining.jpg' : ($department['name'] === 'Pouring' ? 'pouring.jpg' : ($department['name'] === 'Assembly & Packaging' ? 'assembly-packaging.jpg' : 'building.jpg')); ?>
+                        <?php $department_image = $department['name'] === 'Machining' ? 'machining.jpg' : ($department['name'] === 'Pouring' ? 'pouring.jpg' : ($department['name'] === 'Assembly & Packaging' ? 'assembly_packaging.jpg' : 'building.jpg')); ?>
                         <div class="tlk-production-card__image-wrap" aria-hidden="true">
                             <img
                                 class="tlk-production-card__image"
