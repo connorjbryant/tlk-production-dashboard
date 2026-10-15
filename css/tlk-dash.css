@@ -848,6 +848,10 @@ body.tlk-prod-dash .production-entry-field {
   flex: 1 1 0 !important;
 }
 
+body.tlk-prod-dash .production-remove-row {
+  height: 100%;
+}
+
 body.tlk-prod-dash .production-remove-row,
 body.tlk-prod-dash .recent-entry__save {
   flex: 0 0 auto !important;
