@@ -1149,6 +1149,7 @@ body.tlk-prod-dash .tlk-production-card--single .tlk-production-card__image {
 .tlk-part-name {
   flex: 2;
   min-width: 80px;
+  line-height: 1.25rem !important;
 }
 .tlk-part-qty {
   flex: 1;
