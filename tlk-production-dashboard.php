@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 3.7.9
+ * Version: 3.8.5
  * License: GPL-2.0+
  */
 
@@ -23,7 +23,7 @@ function tlk_dash_enqueue_assets(){
         return;
     }
 
-    $version = '3.7.9';
+    $version = '3.8.5';
 
     wp_enqueue_style(
         'tlk_dash_styles',
@@ -1950,19 +1950,17 @@ function custom_login_redirect($redirect_to, $request, $user) {
     );
 
     if (!empty($user->user_email)) {
-        $email = strtolower((string) $user->user_email);
+        $email = strtolower(trim((string) $user->user_email));
 
-        // Brian gets a one-time destination chooser immediately after login.
-        // Choosing Production Dashboard removes the query string and loads the
-        // normal dashboard, so there is no redirect loop.
-        if ($email === 'brian@tlkprecision.com') {
-            return add_query_arg(
-                'tlk_choose_destination',
-                '1',
-                home_url('/tlk-production-dashboard/')
-            );
+        // These users get the destination chooser after login.
+        if (in_array($email, array(
+            'brian@tlkprecision.com',
+            'deric@tlkprecision.com',
+        ), true)) {
+            return home_url('/tlk-choose-destination/');
         }
 
+        // All other allowed users go directly to the dashboard.
         if (in_array($email, $allowed_emails, true)) {
             return home_url('/tlk-production-dashboard/');
         }
@@ -1977,6 +1975,37 @@ add_filter(
     PHP_INT_MAX,
     3
 );
+
+
+/**
+ * Standalone destination chooser for Brian and Deric.
+ * Render before WordPress canonical redirects and without requiring a WP page.
+ */
+function tlk_render_destination_chooser() {
+    $path = trim((string) wp_parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH), '/');
+    $target = trim((string) wp_parse_url(home_url('/tlk-choose-destination/'), PHP_URL_PATH), '/');
+    if ($path !== $target) {
+        return;
+    }
+
+    if (!is_user_logged_in()) {
+        auth_redirect();
+        exit;
+    }
+
+    $email = strtolower(trim((string) wp_get_current_user()->user_email));
+    if (!in_array($email, array('brian@tlkprecision.com', 'deric@tlkprecision.com'), true)) {
+        wp_safe_redirect(home_url('/tlk-production-dashboard/'));
+        exit;
+    }
+
+    status_header(200);
+    nocache_headers();
+    wp_enqueue_style('tlk_destination_chooser', plugins_url('css/tlk-dash.css', __FILE__), array(), '3.8.2');
+    require plugin_dir_path(__FILE__) . 'templates/destination-chooser.php';
+    exit;
+}
+add_action('template_redirect', 'tlk_render_destination_chooser', 0);
 
 /**
  * TLK scheduled holidays for a given calendar year.

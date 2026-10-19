@@ -993,6 +993,7 @@ body.tlk-prod-dash .tlk-production-card--single .tlk-production-card__image {
   text-align: center;
   background: #fff;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+  z-index: 999;
 }
 
 .tlk-destination-choice__card h1 {
