@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 3.8.8
+ * Version: 3.9.0
  * License: GPL-2.0+
  */
 
@@ -23,7 +23,7 @@ function tlk_dash_enqueue_assets(){
         return;
     }
 
-    $version = '3.8.8';
+    $version = '3.9.0';
 
     wp_enqueue_style(
         'tlk_dash_styles',
@@ -2134,6 +2134,17 @@ function tlk_get_department_daily_average($department, $year = null, $month = nu
  * Return total production and active employee-days for a department/range.
  * Multiple entries by the same employee on the same date count as one person-day.
  */
+/**
+ * Hours are per entry starting October 21, 2026. Earlier entries did not
+ * capture hours, so treat all entries for one employee/day as one 10h shift.
+ * Cap every employee/day at 10h, including newly recorded partial shifts.
+ */
+function tlk_daily_hours_sql($alias = '') {
+    $prefix = $alias !== '' ? $alias . '.' : '';
+    return "CASE WHEN DATE({$prefix}entry_date) <= '2026-10-20' THEN 10 "
+        . "ELSE LEAST(10, SUM(COALESCE({$prefix}hours_worked, 0))) END";
+}
+
 function tlk_get_department_person_day_stats($department, $start_date, $end_date) {
     global $wpdb;
     $production = $wpdb->prefix . 'tlk_production';
@@ -2159,7 +2170,7 @@ function tlk_get_department_person_day_stats($department, $start_date, $end_date
 
     $hours_total = $wpdb->get_var($wpdb->prepare(
         "SELECT COALESCE(SUM(shift_hours), 0) FROM (
-            SELECT DATE(entry_date) AS shift_date, employee, MAX(hours_worked) AS shift_hours
+            SELECT DATE(entry_date) AS shift_date, employee, CASE WHEN DATE(entry_date) <= '2026-10-20' THEN 10 ELSE LEAST(10, SUM(hours_worked)) END AS shift_hours
             FROM {$production}
             WHERE department = %s AND entry_date BETWEEN %s AND %s
               AND WEEKDAY(entry_date) BETWEEN 0 AND 4
@@ -2201,9 +2212,21 @@ function tlk_get_department_daily_totals_range($department, $start_date, $end_da
     ), ARRAY_A);
 }
 
+/** Actual parts per employee-day, without scaling short shifts to ten hours. */
+function tlk_get_department_actual_daily_average($department, $year = null, $month = null) {
+    $year = $year ?: (int) wp_date('Y');
+    $month = $month ?: (int) wp_date('n');
+    $start = sprintf('%04d-%02d-01', $year, $month);
+    $month_end = (new DateTimeImmutable($start, wp_timezone()))->modify('last day of this month');
+    $today = new DateTimeImmutable(wp_date('Y-m-d'), wp_timezone());
+    $end = ($month_end < $today ? $month_end : $today)->format('Y-m-d');
+    $stats = tlk_get_department_person_day_stats($department, $start, $end);
+    return $stats['person_days'] > 0 ? $stats['attributable_parts'] / $stats['person_days'] : 0;
+}
+
 function tlk_department_quota($department) {
     $daily_target = tlk_get_department_target($department);
-    $average = tlk_get_department_daily_average($department);
+    $average = tlk_get_department_actual_daily_average($department);
 
     return array(
         'total' => $average,
@@ -2372,14 +2395,20 @@ function tlk_get_employee_performance($department, $year, $month) {
     global $wpdb;
     $production = $wpdb->prefix . 'tlk_production';
     $rows = $wpdb->get_results($wpdb->prepare(
-        "SELECT employee, SUM(CAST(qty AS DECIMAL(10,2))) AS produced,
-                MAX(hours_worked) AS worked_hours
-         FROM {$production}
-         WHERE department = %s AND YEAR(entry_date) = %d AND MONTH(entry_date) = %d
-           AND employee IS NOT NULL AND employee != ''
-           AND employee != 'Historical / Unassigned'
-         GROUP BY employee ORDER BY employee ASC",
-        $department, $year, $month
+        "SELECT p.employee, SUM(CAST(p.qty AS DECIMAL(10,2))) AS produced,
+                (SELECT COALESCE(SUM(sh.h), 0) FROM (
+                    SELECT employee, DATE(entry_date) AS workday,
+                           CASE WHEN DATE(entry_date) <= '2026-10-20' THEN 10 ELSE LEAST(10, SUM(hours_worked)) END AS h
+                    FROM {$production}
+                    WHERE department = %s AND YEAR(entry_date) = %d AND MONTH(entry_date) = %d
+                    GROUP BY employee, DATE(entry_date)
+                ) sh WHERE sh.employee = p.employee) AS worked_hours
+         FROM {$production} p
+         WHERE p.department = %s AND YEAR(p.entry_date) = %d AND MONTH(p.entry_date) = %d
+           AND p.employee IS NOT NULL AND p.employee != ''
+           AND p.employee != 'Historical / Unassigned'
+         GROUP BY p.employee ORDER BY p.employee ASC",
+        $department, $year, $month, $department, $year, $month
     ), ARRAY_A);
 
     foreach ($rows as &$row) {
@@ -2396,14 +2425,16 @@ function tlk_get_department_performance($department, $year = null, $month = null
     $year = $year ?: (int) wp_date('Y');
     $month = $month ?: (int) wp_date('n');
 
-    $average = tlk_get_department_daily_average($department, $year, $month);
+    // Keep performance based on the hours-adjusted, 10-hour-equivalent rate.
+    $normalized_average = tlk_get_department_daily_average($department, $year, $month);
+    $actual_average = tlk_get_department_actual_daily_average($department, $year, $month);
     $daily_target = tlk_get_department_target($department);
-    $percent = $daily_target > 0 ? ($average / $daily_target) * 100 : 0;
+    $percent = $daily_target > 0 ? ($normalized_average / $daily_target) * 100 : 0;
 
     return array(
-        'average_parts' => $average,
+        'average_parts' => $actual_average,
         'percent' => $percent,
-        'met' => $daily_target > 0 && $average >= $daily_target,
+        'met' => $daily_target > 0 && $normalized_average >= $daily_target,
         'employee_count' => 0,
     );
 }
@@ -2643,7 +2674,7 @@ function tlk_get_employee_performance_range($department, $start_date, $end_date)
         "SELECT p.employee,
                 SUM(CAST(p.qty AS DECIMAL(10,2))) AS produced,
                 COUNT(DISTINCT DATE(p.entry_date)) AS active_days,
-                (SELECT COALESCE(SUM(sh.h), 0) FROM (SELECT department, employee, DATE(entry_date) AS workday, MAX(hours_worked) AS h FROM {$production} WHERE entry_date BETWEEN %s AND %s GROUP BY department, employee, DATE(entry_date)) sh WHERE sh.department = %s AND sh.employee = p.employee) AS worked_hours
+                (SELECT COALESCE(SUM(sh.h), 0) FROM (SELECT department, employee, DATE(entry_date) AS workday, CASE WHEN DATE(entry_date) <= '2026-10-20' THEN 10 ELSE LEAST(10, SUM(hours_worked)) END AS h FROM {$production} WHERE entry_date BETWEEN %s AND %s GROUP BY department, employee, DATE(entry_date)) sh WHERE sh.department = %s AND sh.employee = p.employee) AS worked_hours
          FROM {$production} p
          WHERE p.department = %s
            AND p.entry_date BETWEEN %s AND %s
@@ -3030,7 +3061,7 @@ function tlk_render_employee_performance_page() {
                             }
                             $day_employee_count = count($day_employees);
                             $day_hours = (float) $wpdb->get_var($wpdb->prepare(
-                                "SELECT COALESCE(SUM(shift_hours), 0) FROM (SELECT employee, MAX(hours_worked) AS shift_hours FROM {$wpdb->prefix}tlk_production WHERE department = %s AND DATE(entry_date) = %s AND employee != %s AND employee != '' GROUP BY employee) AS shifts",
+                                "SELECT COALESCE(SUM(shift_hours), 0) FROM (SELECT employee, CASE WHEN DATE(entry_date) <= '2026-10-20' THEN 10 ELSE LEAST(10, SUM(hours_worked)) END AS shift_hours FROM {$wpdb->prefix}tlk_production WHERE department = %s AND DATE(entry_date) = %s AND employee != %s AND employee != '' GROUP BY employee) AS shifts",
                                 $department, $item['production_date'], tlk_historical_unassigned_employee()
                             ));
                             $day_expected = $dept_goal * ($day_hours / 10);
