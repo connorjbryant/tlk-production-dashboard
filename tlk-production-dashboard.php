@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 3.9.1
+ * Version: 3.9.2
  * License: GPL-2.0+
  */
 
@@ -23,7 +23,7 @@ function tlk_dash_enqueue_assets(){
         return;
     }
 
-    $version = '3.9.1';
+    $version = '3.9.2';
 
     wp_enqueue_style(
         'tlk_dash_styles',
@@ -2414,7 +2414,7 @@ function tlk_get_employee_performance($department, $year, $month) {
     foreach ($rows as &$row) {
         $row['produced'] = (float) $row['produced'];
         $row['worked_hours'] = (float) $row['worked_hours'];
-        $row['target'] = tlk_get_employee_target($row['employee'], $department, 60);
+        $row['target'] = tlk_get_employee_target($row['employee'], $department, tlk_get_department_target($department));
         $row['percent'] = $row['target'] > 0 ? ($row['produced'] / $row['target']) * 100 : 0;
     }
     unset($row);
@@ -2690,7 +2690,7 @@ function tlk_get_employee_performance_range($department, $start_date, $end_date)
         $row['worked_hours'] = (float) $row['worked_hours'];
         $row['active_days'] = (int) $row['active_days'];
         $row['daily_average'] = (float) $row['worked_hours'] > 0 ? $row['produced'] / ((float) $row['worked_hours'] / 10) : 0;
-        $row['target'] = tlk_get_employee_target($row['employee'], $department, 60);
+        $row['target'] = tlk_get_employee_target($row['employee'], $department, tlk_get_department_target($department));
         $row['workdays'] = $row['active_days'];
         $row['expected'] = $row['target'] * ((float) $row['worked_hours'] / 10);
         $row['percent'] = $row['expected'] > 0 ? ($row['produced'] / $row['expected']) * 100 : 0;
@@ -3086,7 +3086,7 @@ function tlk_render_employee_performance_page() {
                             <td><?php echo esc_html(wp_date('M j, Y', strtotime($item['week_start']))); ?></td>
                             <td><?php echo esc_html($item['employee']); ?></td>
                             <?php
-                            $daily_target = tlk_get_employee_target($item['employee'], $department, 60);
+                            $daily_target = tlk_get_employee_target($item['employee'], $department, tlk_get_department_target($department));
                             $adjusted_goal = $daily_target * ((float) $item['worked_hours'] / 10);
                             $daily_percent = $adjusted_goal > 0 ? ((float) $item['produced'] / $adjusted_goal) * 100 : 0;
                         ?>
