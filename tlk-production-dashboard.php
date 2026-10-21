@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 3.8.6
+ * Version: 3.8.8
  * License: GPL-2.0+
  */
 
@@ -23,7 +23,7 @@ function tlk_dash_enqueue_assets(){
         return;
     }
 
-    $version = '3.8.6';
+    $version = '3.8.8';
 
     wp_enqueue_style(
         'tlk_dash_styles',
@@ -234,6 +234,7 @@ function tlk_create_production_table(){
         department VARCHAR(50) DEFAULT '',
         employee VARCHAR(100) DEFAULT '',
         qty VARCHAR(50) DEFAULT '',
+        hours_worked DECIMAL(5,2) NOT NULL DEFAULT 10.00,
         entry_date DATETIME NOT NULL,
         updated_at DATETIME DEFAULT NULL,
         PRIMARY KEY (id),
@@ -246,6 +247,17 @@ function tlk_create_production_table(){
     dbDelta($sql);
 }
 register_activation_hook(__FILE__, 'tlk_create_production_table');
+// Upgrade existing installations without requiring plugin reactivation.
+add_action('init', function () {
+    if (get_option('tlk_hours_schema_v1') === 'yes') { return; }
+    tlk_create_production_table();
+    global $wpdb;
+    $table = $wpdb->prefix . 'tlk_production';
+    if ($wpdb->get_var($wpdb->prepare('SHOW COLUMNS FROM `' . esc_sql($table) . '` LIKE %s', 'hours_worked'))) {
+        update_option('tlk_hours_schema_v1', 'yes', false);
+    }
+}, 5);
+
 
 /**
  * Upgrade the production table when new columns/indexes are added.
@@ -651,6 +663,7 @@ function handle_production_form_submission() {
     $department = sanitize_text_field(wp_unslash($_POST['department']));
     $employees  = (array) wp_unslash($_POST['employee']);
     $quantities = (array) wp_unslash($_POST['qty']);
+    $hours = isset($_POST['hours_worked']) ? (array) wp_unslash($_POST['hours_worked']) : array();
     $advanced = isset($_POST['entry_mode']) && sanitize_key(wp_unslash($_POST['entry_mode'])) === 'advanced';
     if ($advanced && !tlk_advanced_enabled($department)) { wp_die('Advanced entry is disabled for this department.'); }
     $part_names = isset($_POST['part_name']) ? (array) wp_unslash($_POST['part_name']) : array();
@@ -726,6 +739,11 @@ function handle_production_form_submission() {
             }
         }
 
+        $hours_raw = isset($hours[$index]) ? $hours[$index] : '10';
+        if (!is_numeric($hours_raw) || (float) $hours_raw <= 0 || (float) $hours_raw > 24) {
+            wp_die('Hours worked must be greater than 0 and no more than 24.');
+        }
+        $worked = round((float) $hours_raw, 2);
         $qty = absint($qty_raw);
 
         $result = $wpdb->insert(
@@ -735,9 +753,10 @@ function handle_production_form_submission() {
                 'department' => $department,
                 'employee'   => $employee,
                 'qty'        => $qty,
+                'hours_worked' => $worked,
                 'entry_date' => $entry_date,
             ),
-            array('%d', '%s', '%s', '%d', '%s')
+            array('%d', '%s', '%s', '%d', '%f', '%s')
         );
 
         if ($result === false) {
@@ -796,7 +815,7 @@ function tlk_get_current_user_editable_entries() {
 
     return $wpdb->get_results(
         $wpdb->prepare(
-            "SELECT id, user_id, department, employee, qty, entry_date, updated_at
+            "SELECT id, user_id, department, employee, qty, hours_worked, entry_date, updated_at
              FROM {$table_name}
              WHERE user_id = %d
                AND entry_date >= DATE_SUB(%s, INTERVAL 24 HOUR)
@@ -861,6 +880,11 @@ function tlk_handle_production_entry_update() {
         ? absint($_POST['qty'])
         : 0;
 
+    $hours_raw = isset($_POST['hours_worked']) ? wp_unslash($_POST['hours_worked']) : '10';
+    if (!is_numeric($hours_raw) || (float) $hours_raw <= 0 || (float) $hours_raw > 24) {
+        wp_die('Hours worked must be greater than 0 and no more than 24.');
+    }
+    $worked = round((float) $hours_raw, 2);
     if (!$entry_id || $department === '' || $employee === '') {
         wp_die('Missing required parameters.');
     }
@@ -909,6 +933,7 @@ function tlk_handle_production_entry_update() {
             'department' => $department,
             'employee'   => $employee,
             'qty'        => $qty,
+            'hours_worked' => $worked,
             'updated_at' => current_time('mysql'),
         ),
         array(
@@ -919,6 +944,7 @@ function tlk_handle_production_entry_update() {
             '%s',
             '%s',
             '%d',
+            '%f',
             '%s',
         ),
         array(
@@ -2101,7 +2127,7 @@ function tlk_get_department_daily_average($department, $year = null, $month = nu
     $range_end = $range_end_obj->format('Y-m-d');
 
     $stats = tlk_get_department_person_day_stats($department, $month_start, $range_end);
-    return $stats['person_days'] > 0 ? $stats['attributable_parts'] / $stats['person_days'] : 0;
+    return $stats['worked_hours'] > 0 ? $stats['attributable_parts'] / ($stats['worked_hours'] / 10) : 0;
 }
 
 /**
@@ -2131,7 +2157,19 @@ function tlk_get_department_person_day_stats($department, $start_date, $end_date
         $end_date . ' 23:59:59'
     ), ARRAY_A);
 
+    $hours_total = $wpdb->get_var($wpdb->prepare(
+        "SELECT COALESCE(SUM(shift_hours), 0) FROM (
+            SELECT DATE(entry_date) AS shift_date, employee, MAX(hours_worked) AS shift_hours
+            FROM {$production}
+            WHERE department = %s AND entry_date BETWEEN %s AND %s
+              AND WEEKDAY(entry_date) BETWEEN 0 AND 4
+              AND employee IS NOT NULL AND employee != '' AND employee != %s
+            GROUP BY DATE(entry_date), employee
+        ) AS shifts",
+        $department, $start_date . ' 00:00:00', $end_date . ' 23:59:59', $historical
+    ));
     return array(
+        'worked_hours' => (float) $hours_total,
         'total_parts'       => isset($row['total_parts']) ? (float) $row['total_parts'] : 0,
         'attributable_parts'=> isset($row['attributable_parts']) ? (float) $row['attributable_parts'] : 0,
         'historical_parts'  => isset($row['historical_parts']) ? (float) $row['historical_parts'] : 0,
@@ -2334,7 +2372,8 @@ function tlk_get_employee_performance($department, $year, $month) {
     global $wpdb;
     $production = $wpdb->prefix . 'tlk_production';
     $rows = $wpdb->get_results($wpdb->prepare(
-        "SELECT employee, SUM(CAST(qty AS DECIMAL(10,2))) AS produced
+        "SELECT employee, SUM(CAST(qty AS DECIMAL(10,2))) AS produced,
+                MAX(hours_worked) AS worked_hours
          FROM {$production}
          WHERE department = %s AND YEAR(entry_date) = %d AND MONTH(entry_date) = %d
            AND employee IS NOT NULL AND employee != ''
@@ -2345,6 +2384,7 @@ function tlk_get_employee_performance($department, $year, $month) {
 
     foreach ($rows as &$row) {
         $row['produced'] = (float) $row['produced'];
+        $row['worked_hours'] = (float) $row['worked_hours'];
         $row['target'] = tlk_get_employee_target($row['employee'], $department, 60);
         $row['percent'] = $row['target'] > 0 ? ($row['produced'] / $row['target']) * 100 : 0;
     }
@@ -2600,26 +2640,28 @@ function tlk_get_employee_performance_range($department, $start_date, $end_date)
     $end   = $end_date . ' 23:59:59';
 
     $rows = $wpdb->get_results($wpdb->prepare(
-        "SELECT employee,
-                SUM(CAST(qty AS DECIMAL(10,2))) AS produced,
-                COUNT(DISTINCT DATE(entry_date)) AS active_days
-         FROM {$production}
-         WHERE department = %s
-           AND entry_date BETWEEN %s AND %s
-           AND employee IS NOT NULL AND employee != ''
-           AND employee != 'Historical / Unassigned'
-         GROUP BY employee
+        "SELECT p.employee,
+                SUM(CAST(p.qty AS DECIMAL(10,2))) AS produced,
+                COUNT(DISTINCT DATE(p.entry_date)) AS active_days,
+                (SELECT COALESCE(SUM(sh.h), 0) FROM (SELECT department, employee, DATE(entry_date) AS workday, MAX(hours_worked) AS h FROM {$production} WHERE entry_date BETWEEN %s AND %s GROUP BY department, employee, DATE(entry_date)) sh WHERE sh.department = %s AND sh.employee = p.employee) AS worked_hours
+         FROM {$production} p
+         WHERE p.department = %s
+           AND p.entry_date BETWEEN %s AND %s
+           AND p.employee IS NOT NULL AND p.employee != ''
+           AND p.employee != 'Historical / Unassigned'
+         GROUP BY p.employee
          ORDER BY employee ASC",
-        $department, $start, $end
+        $start, $end, $department, $department, $start, $end
     ), ARRAY_A);
 
     foreach ($rows as &$row) {
         $row['produced'] = (float) $row['produced'];
+        $row['worked_hours'] = (float) $row['worked_hours'];
         $row['active_days'] = (int) $row['active_days'];
-        $row['daily_average'] = $row['active_days'] > 0 ? $row['produced'] / $row['active_days'] : 0;
+        $row['daily_average'] = (float) $row['worked_hours'] > 0 ? $row['produced'] / ((float) $row['worked_hours'] / 10) : 0;
         $row['target'] = tlk_get_employee_target($row['employee'], $department, 60);
         $row['workdays'] = $row['active_days'];
-        $row['expected'] = $row['target'] * $row['active_days'];
+        $row['expected'] = $row['target'] * ((float) $row['worked_hours'] / 10);
         $row['percent'] = $row['expected'] > 0 ? ($row['produced'] / $row['expected']) * 100 : 0;
     }
     unset($row);
@@ -2863,8 +2905,9 @@ function tlk_render_employee_performance_page() {
             $counted_days = tlk_count_production_days($department, $period['start'], $period['end']);
             $recorded_days = count($department_days);
             $dept_goal = tlk_get_department_target($department);
-            $expected_total = $dept_goal * $person_days;
-            $dept_daily_avg = $person_days ? $attributable_parts / $person_days : 0;
+            $worked_hours = $person_day_stats['worked_hours'];
+            $expected_total = $dept_goal * ($worked_hours / 10);
+            $dept_daily_avg = $worked_hours > 0 ? $attributable_parts / ($worked_hours / 10) : 0;
             $dept_daily_avg_rounded = (int) round($dept_daily_avg);
             $pct_expected = $expected_total > 0 ? ($attributable_parts / $expected_total) * 100 : 0;
             $pct_daily = $dept_goal > 0 ? ($dept_daily_avg / $dept_goal) * 100 : 0;
@@ -2879,9 +2922,9 @@ function tlk_render_employee_performance_page() {
                 <?php endif; ?>
                 <p class="tlk-perf-meta">
                     Expected: <strong><?php echo esc_html(number_format_i18n($expected_total)); ?></strong>
-                    (<?php echo esc_html(number_format_i18n($dept_goal)); ?>/person/day × <?php echo esc_html(number_format_i18n($person_days)); ?> active person-days)<br>
+                    (<?php echo esc_html(number_format_i18n($dept_goal)); ?>/10-hour shift × <?php echo esc_html(number_format_i18n($worked_hours, 2)); ?> worked hours ÷ 10)<br>
                     Period vs expected: <span class="<?php echo esc_attr($pct_class); ?>"><?php echo esc_html(number_format_i18n($pct_expected, 1)); ?>%</span><br>
-                    Avg parts per person/day (Assigned Parts / Active Person-Days): <strong><?php echo esc_html(number_format_i18n($dept_daily_avg_rounded)); ?></strong>
+                    Avg parts per 10-hour equivalent shift: <strong><?php echo esc_html(number_format_i18n($dept_daily_avg_rounded)); ?></strong>
                     · Per-person daily goal: <strong><?php echo esc_html(number_format_i18n($dept_goal)); ?></strong><br>
                     <span style="color:#646970;">Exact average: <?php echo esc_html(number_format_i18n($dept_daily_avg, 2)); ?></span>
                 </p>
@@ -2901,12 +2944,16 @@ function tlk_render_employee_performance_page() {
                 <h2><?php echo esc_html($department); ?></h2>
                 <?php if (!$rows): ?><p>No production entries for this department in this period.</p><?php else: ?>
                 <table class="widefat striped">
-                    <thead><tr><th>Employee</th><th>Period Total</th><th>Days With Output</th><th>Avg / Active Day</th></tr></thead>
+                    <thead><tr><th>Employee</th><th>Period Total</th><th>Days With Output</th><th>Hours Worked</th><th>Full-Shift Goal</th><th>Adjusted Goal</th><th>% of Adjusted Goal</th><th>Avg / 10-Hour Shift</th></tr></thead>
                     <tbody><?php foreach ($rows as $row): ?>
                         <tr>
                             <td><strong><?php echo esc_html($row['employee']); ?></strong></td>
                             <td><strong><?php echo esc_html(number_format_i18n($row['produced'])); ?></strong></td>
                             <td><?php echo esc_html(number_format_i18n($row['active_days'])); ?></td>
+                            <td><?php echo esc_html(number_format_i18n($row['worked_hours'], 2)); ?></td>
+                            <td><?php echo esc_html(number_format_i18n($row['target'])); ?> / 10h</td>
+                            <td><strong><?php echo esc_html(number_format_i18n($row['expected'], 1)); ?></strong></td>
+                            <td><span class="<?php echo esc_attr(tlk_performance_percent_class($row['percent'])); ?>"><?php echo esc_html(number_format_i18n($row['percent'], 1)); ?>%</span></td>
                             <td><?php echo esc_html(number_format_i18n($row['daily_average'], 1)); ?></td>
                         </tr>
                     <?php endforeach; ?></tbody>
@@ -2970,7 +3017,7 @@ function tlk_render_employee_performance_page() {
                 <details style="margin-top:14px;">
                     <summary style="cursor:pointer;font-weight:600;">Department Daily Totals</summary>
                     <table class="widefat striped" style="margin-top:10px;">
-                        <thead><tr><th>Date</th><th>Department Total</th><th>Historical / Unassigned</th><th>Active Employees</th><th>Expected</th><th>% of Goal</th></tr></thead>
+                        <thead><tr><th>Date</th><th>Department Total</th><th>Historical / Unassigned</th><th>Active Employees</th><th>Hours Worked</th><th>Adjusted Goal</th><th>% of Goal</th></tr></thead>
                         <tbody><?php foreach ($department_days as $item):
                             $day_total = (float) $item['produced'];
                             $day_attributable = (float) $item['attributable_produced'];
@@ -2982,14 +3029,19 @@ function tlk_render_employee_performance_page() {
                                 }
                             }
                             $day_employee_count = count($day_employees);
-                            $day_expected = $dept_goal * $day_employee_count;
+                            $day_hours = (float) $wpdb->get_var($wpdb->prepare(
+                                "SELECT COALESCE(SUM(shift_hours), 0) FROM (SELECT employee, MAX(hours_worked) AS shift_hours FROM {$wpdb->prefix}tlk_production WHERE department = %s AND DATE(entry_date) = %s AND employee != %s AND employee != '' GROUP BY employee) AS shifts",
+                                $department, $item['production_date'], tlk_historical_unassigned_employee()
+                            ));
+                            $day_expected = $dept_goal * ($day_hours / 10);
                             $day_percent = $day_expected > 0 ? ($day_attributable / $day_expected) * 100 : 0;
                         ?><tr>
                             <td><?php echo esc_html(wp_date('D, M j, Y', strtotime($item['production_date']))); ?></td>
                             <td><?php echo esc_html(number_format_i18n($day_total)); ?></td>
                             <td><?php echo $day_historical > 0 ? esc_html(number_format_i18n($day_historical)) : '&mdash;'; ?></td>
                             <td><?php echo esc_html(number_format_i18n($day_employee_count)); ?></td>
-                            <td><?php echo esc_html(number_format_i18n($day_expected)); ?></td>
+                            <td><?php echo esc_html(number_format_i18n($day_hours, 2)); ?></td>
+                            <td><?php echo esc_html(number_format_i18n($day_expected, 1)); ?></td>
                             <td><?php echo esc_html(number_format_i18n($day_percent, 1)); ?>%</td>
                         </tr><?php endforeach; ?></tbody>
                     </table>
@@ -3002,7 +3054,15 @@ function tlk_render_employee_performance_page() {
                         <tbody><?php foreach ($weekly as $item): ?><tr>
                             <td><?php echo esc_html(wp_date('M j, Y', strtotime($item['week_start']))); ?></td>
                             <td><?php echo esc_html($item['employee']); ?></td>
+                            <?php
+                            $daily_target = tlk_get_employee_target($item['employee'], $department, 60);
+                            $adjusted_goal = $daily_target * ((float) $item['worked_hours'] / 10);
+                            $daily_percent = $adjusted_goal > 0 ? ((float) $item['produced'] / $adjusted_goal) * 100 : 0;
+                        ?>
                             <td><?php echo esc_html(number_format_i18n((float)$item['produced'])); ?></td>
+                            <td><?php echo esc_html(number_format_i18n((float)$item['worked_hours'], 2)); ?></td>
+                            <td><?php echo esc_html(number_format_i18n($adjusted_goal, 1)); ?></td>
+                            <td><?php echo esc_html(number_format_i18n($daily_percent, 1)); ?>%</td>
                         </tr><?php endforeach; ?></tbody>
                     </table>
                 </details>
@@ -3010,7 +3070,7 @@ function tlk_render_employee_performance_page() {
                 <details style="margin-top:10px;">
                     <summary style="cursor:pointer;font-weight:600;">Daily Output by Employee</summary>
                     <table class="widefat striped" style="margin-top:10px;">
-                        <thead><tr><th>Date</th><th>Employee</th><th>Produced</th></tr></thead>
+                        <thead><tr><th>Date</th><th>Employee</th><th>Produced</th><th>Hours Worked</th><th>Adjusted Goal</th><th>% of Goal</th></tr></thead>
                         <tbody><?php foreach ($daily as $item): ?><tr>
                             <td><?php echo esc_html(wp_date('D, M j, Y', strtotime($item['production_date']))); ?></td>
                             <td><?php echo esc_html($item['employee']); ?></td>

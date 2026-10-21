@@ -171,7 +171,8 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                         <input type="number" name="qty[]" min="0" required>
                     </div>
 
-                    <div class="tlk-advanced-parts" hidden><label>Part name / Quantity produced</label><div class="tlk-part-lines"></div><button type="button" class="tlk-add-part">+ Add another part</button></div>
+                    <div class="production-entry-field"><label>Hours worked:</label><input type="number" name="hours_worked[]" min="1" max="10" step="1" value="10" required></div>
+                <div class="tlk-advanced-parts" hidden><label>Part name / Quantity produced</label><div class="tlk-part-lines"></div><button type="button" class="tlk-add-part">+ Add another part</button></div>
                 <button type="button" class="production-remove-row" aria-label="Remove employee entry">Remove</button>
                 </div>
             </div>
@@ -199,6 +200,10 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                     <input type="number" name="qty[]" min="0" required>
                 </div>
 
+                <div class="production-entry-field">
+                    <label>Hours worked:</label>
+                    <input type="number" name="hours_worked[]" min="1" max="10" step="1" value="10" required>
+                </div>
                 <div class="tlk-advanced-parts" hidden><label>Part name / Quantity produced</label><div class="tlk-part-lines"></div><button type="button" class="tlk-add-part">+ Add another part</button></div>
                 <button type="button" class="production-remove-row" aria-label="Remove employee entry">Remove</button>
             </div>
@@ -335,6 +340,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                                     >
                                 </div>
 
+                                <div class="recent-entry__field"><label>Hours worked</label><input type="number" name="hours_worked" min="1" max="10" step="1" value="<?php echo esc_attr(isset($entry['hours_worked']) ? $entry['hours_worked'] : 10); ?>" required></div>
                                 <button type="submit" class="recent-entry__save">
                                     Save Changes
                                 </button>
