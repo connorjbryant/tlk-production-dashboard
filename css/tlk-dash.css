@@ -164,8 +164,8 @@ body:not(.logged-in).tlk-prod-dash .site-content {
 
 .department-image {
   width: 100%;
-  min-height: 180px;
-  max-height: 180px;
+  min-height: 210px;
+  max-height: 210px;
   overflow: hidden;
   border-radius: var(--tlk-radius);
 }
@@ -1245,6 +1245,9 @@ body.tlk-prod-dash .tlk-production-grid .tlk-production-card {
 .tlk-production-card.tlk-dept-assembly-packaging {
   --tlk-dept-color: #388b36;
 }
+.tlk-production-card.tlk-dept-flex-rock {
+  --tlk-dept-color: #38a8d8;
+}
 .tlk-production-card[class*="tlk-dept-"] {
   border-color: var(--tlk-dept-color) !important;
 }
@@ -1267,6 +1270,10 @@ body.tlk-prod-dash .tlk-production-card.tlk-dept-assembly-packaging,
 body.tlk-prod-dash .tlk-production-card.tlk-dept-assembly-packaging {
   --tlk-dept-color: #388b36;
   --tlk-dept-tint: #ecf8eb;
+}
+body.tlk-prod-dash .tlk-production-card.tlk-dept-flex-rock {
+  --tlk-dept-color: #38a8d8;
+  --tlk-dept-tint: #eaf8ff;
 }
 body.tlk-prod-dash .tlk-production-card[class*="tlk-dept-"] {
   background: var(--tlk-dept-tint) !important;

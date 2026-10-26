@@ -129,11 +129,25 @@ jQuery(document).ready(function ($) {
     var settingsNode = document.getElementById('tlk-entry-settings');
     var entrySettings = settingsNode ? JSON.parse(settingsNode.textContent) : {enabled:{},parts:{}};
     var entryMode = 'basic';
+    function updateNotesVisibility() {
+        var enabled = !!((entrySettings.notes || {})[$('#department').val()]);
+        $('#production-entry-list .tlk-entry-notes').each(function(){
+            $(this).prop('hidden', !enabled).find('textarea').prop('disabled', !enabled);
+        });
+    }
+    $('#department').on('change', updateNotesVisibility);
+    $(document).on('click', '#production-add-row', function(){ window.setTimeout(updateNotesVisibility, 0); });
+    $(document).on('change', '.recent-entry__form select[name=department]', function(){
+        var $form = $(this).closest('form'), $field = $form.find('.tlk-edit-notes');
+        var enabled = !!((entrySettings.notes || {})[$(this).val()]);
+        $field.prop('hidden', !enabled).find('textarea').prop('disabled', !enabled);
+    });
+    updateNotesVisibility();
     function addPart($row) {
         var dept = $('#department').val();
         var index = $('#production-entry-list .production-entry-row').index($row);
         var parts = (entrySettings.parts || {})[dept] || [];
-        var $line = $('<div class="tlk-part-line"><input type="text" class="tlk-part-name" placeholder="Recess member, button, etc. " required><input type="number" class="tlk-part-qty" min="0" placeholder="0" required><button type="button" class="tlk-remove-part" aria-label="Remove part" data-tooltip="Remove last part">×</button></div>');
+        var $line = $('<div class="tlk-part-line"><input type="text" class="tlk-part-name" placeholder="Part 1, 2, etc." required><input type="number" class="tlk-part-qty" min="0" placeholder="0" required><button type="button" class="tlk-remove-part" aria-label="Remove part" data-tooltip="Remove last part">×</button></div>');
         $line.find('.tlk-part-name').attr('name','part_name['+index+'][]').attr('list','tlk-part-options');
         $line.find('.tlk-part-qty').attr('name','part_qty['+index+'][]');
         $row.find('.tlk-part-lines').append($line);
@@ -273,7 +287,8 @@ jQuery(document).ready(function ($) {
         'Machining': 'machining.jpg',
         'Pouring': 'pouring.jpg',
         
-        'Assembly & Packaging': 'assembly_packaging.jpg'
+        'Assembly & Packaging': 'assembly_packaging.jpg',
+        'Flex Rock': 'flex_rock.jpg'
     };
 
     function updateDepartmentImage() {

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 3.9.2
+ * Version: 4.0.3
  * License: GPL-2.0+
  */
 
@@ -23,7 +23,7 @@ function tlk_dash_enqueue_assets(){
         return;
     }
 
-    $version = '3.9.2';
+    $version = '4.0.3';
 
     wp_enqueue_style(
         'tlk_dash_styles',
@@ -235,6 +235,7 @@ function tlk_create_production_table(){
         employee VARCHAR(100) DEFAULT '',
         qty VARCHAR(50) DEFAULT '',
         hours_worked DECIMAL(5,2) NOT NULL DEFAULT 10.00,
+        entry_notes TEXT NULL,
         entry_date DATETIME NOT NULL,
         updated_at DATETIME DEFAULT NULL,
         PRIMARY KEY (id),
@@ -247,6 +248,20 @@ function tlk_create_production_table(){
     dbDelta($sql);
 }
 register_activation_hook(__FILE__, 'tlk_create_production_table');
+// Add optional notes to existing production tables without touching historical records.
+function tlk_ensure_production_notes_column() {
+    if (get_option('tlk_production_notes_schema_v1') === '1') { return; }
+    global $wpdb;
+    $table = $wpdb->prefix . 'tlk_production';
+    if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table)) !== $table) { return; }
+    $exists = $wpdb->get_var($wpdb->prepare("SHOW COLUMNS FROM `{$table}` LIKE %s", 'entry_notes'));
+    if (!$exists) { $wpdb->query("ALTER TABLE `{$table}` ADD COLUMN entry_notes TEXT NULL"); }
+    if ($wpdb->get_var($wpdb->prepare("SHOW COLUMNS FROM `{$table}` LIKE %s", 'entry_notes'))) {
+        update_option('tlk_production_notes_schema_v1', '1', false);
+    }
+}
+add_action('init', 'tlk_ensure_production_notes_column');
+
 // Upgrade existing installations without requiring plugin reactivation.
 add_action('init', function () {
     if (get_option('tlk_hours_schema_v1') === 'yes') { return; }
@@ -664,6 +679,7 @@ function handle_production_form_submission() {
     $employees  = (array) wp_unslash($_POST['employee']);
     $quantities = (array) wp_unslash($_POST['qty']);
     $hours = isset($_POST['hours_worked']) ? (array) wp_unslash($_POST['hours_worked']) : array();
+    $entry_notes = isset($_POST['entry_notes']) ? (array) wp_unslash($_POST['entry_notes']) : array();
     $advanced = isset($_POST['entry_mode']) && sanitize_key(wp_unslash($_POST['entry_mode'])) === 'advanced';
     if ($advanced && !tlk_advanced_enabled($department)) { wp_die('Advanced entry is disabled for this department.'); }
     $part_names = isset($_POST['part_name']) ? (array) wp_unslash($_POST['part_name']) : array();
@@ -672,7 +688,7 @@ function handle_production_form_submission() {
         ? (array) wp_unslash($_POST['new_employee'])
         : array();
 
-    $allowed_departments = array('Pouring', 'Machining', 'Assembly & Packaging');
+    $allowed_departments = array('Pouring', 'Machining', 'Assembly & Packaging', 'Flex Rock');
 
     if (!in_array($department, $allowed_departments, true)) {
         wp_die('Invalid department.');
@@ -754,9 +770,10 @@ function handle_production_form_submission() {
                 'employee'   => $employee,
                 'qty'        => $qty,
                 'hours_worked' => $worked,
+                'entry_notes' => tlk_notes_enabled($department) ? sanitize_textarea_field($entry_notes[$index] ?? '') : '',
                 'entry_date' => $entry_date,
             ),
-            array('%d', '%s', '%s', '%d', '%f', '%s')
+            array('%d', '%s', '%s', '%d', '%f', '%s', '%s')
         );
 
         if ($result === false) {
@@ -801,6 +818,10 @@ add_action(
  * Get the current logged-in user's production entries that are still editable.
  * Entries are editable for 24 hours after they were created.
  */
+function tlk_unlimited_entry_edits_enabled() {
+    return get_option('tlk_unlimited_entry_edits', '0') === '1';
+}
+
 function tlk_get_current_user_editable_entries() {
     global $wpdb;
 
@@ -813,9 +834,16 @@ function tlk_get_current_user_editable_entries() {
     $table_name = $wpdb->prefix . 'tlk_production';
     $now = current_time('mysql');
 
+    if (tlk_unlimited_entry_edits_enabled()) {
+        return $wpdb->get_results($wpdb->prepare(
+            "SELECT id, user_id, department, employee, qty, hours_worked, entry_notes, entry_date, updated_at FROM {$table_name} WHERE user_id = %d ORDER BY entry_date DESC",
+            $user_id
+        ), ARRAY_A);
+    }
+
     return $wpdb->get_results(
         $wpdb->prepare(
-            "SELECT id, user_id, department, employee, qty, hours_worked, entry_date, updated_at
+            "SELECT id, user_id, department, employee, qty, hours_worked, entry_notes, entry_date, updated_at
              FROM {$table_name}
              WHERE user_id = %d
                AND entry_date >= DATE_SUB(%s, INTERVAL 24 HOUR)
@@ -867,7 +895,7 @@ function tlk_handle_production_entry_update() {
         ? $department_aliases[$department_key]
         : $department;
 
-    $allowed_departments = array('Pouring', 'Machining', 'Assembly & Packaging');
+    $allowed_departments = array('Pouring', 'Machining', 'Assembly & Packaging', 'Flex Rock');
     if (!in_array($department, $allowed_departments, true)) {
         wp_die('Invalid department.');
     }
@@ -923,7 +951,7 @@ function tlk_handle_production_entry_update() {
     );
     $now = new DateTimeImmutable('now', $timezone);
 
-    if (!$entry_time || $entry_time->modify('+24 hours') < $now) {
+    if (!$entry_time || (!tlk_unlimited_entry_edits_enabled() && $entry_time->modify('+24 hours') < $now)) {
         wp_die('This production entry can no longer be edited because the 24-hour edit window has expired.');
     }
 
@@ -934,6 +962,7 @@ function tlk_handle_production_entry_update() {
             'employee'   => $employee,
             'qty'        => $qty,
             'hours_worked' => $worked,
+            'entry_notes' => tlk_notes_enabled($department) ? sanitize_textarea_field(wp_unslash($_POST['entry_notes'] ?? '')) : (string) $wpdb->get_var($wpdb->prepare("SELECT entry_notes FROM {$table_name} WHERE id = %d", $entry_id)),
             'updated_at' => current_time('mysql'),
         ),
         array(
@@ -945,6 +974,7 @@ function tlk_handle_production_entry_update() {
             '%s',
             '%d',
             '%f',
+            '%s',
             '%s',
         ),
         array(
@@ -2134,15 +2164,10 @@ function tlk_get_department_daily_average($department, $year = null, $month = nu
  * Return total production and active employee-days for a department/range.
  * Multiple entries by the same employee on the same date count as one person-day.
  */
-/**
- * Hours are per entry starting October 21, 2026. Earlier entries did not
- * capture hours, so treat all entries for one employee/day as one 10h shift.
- * Cap every employee/day at 10h, including newly recorded partial shifts.
- */
+/** Employee hours represent the whole calendar day, not each entry. */
 function tlk_daily_hours_sql($alias = '') {
     $prefix = $alias !== '' ? $alias . '.' : '';
-    return "CASE WHEN DATE({$prefix}entry_date) <= '2026-10-20' THEN 10 "
-        . "ELSE LEAST(10, SUM(COALESCE({$prefix}hours_worked, 0))) END";
+    return "LEAST(10, MAX(COALESCE({$prefix}hours_worked, 10)))";
 }
 
 function tlk_get_department_person_day_stats($department, $start_date, $end_date) {
@@ -2170,7 +2195,7 @@ function tlk_get_department_person_day_stats($department, $start_date, $end_date
 
     $hours_total = $wpdb->get_var($wpdb->prepare(
         "SELECT COALESCE(SUM(shift_hours), 0) FROM (
-            SELECT DATE(entry_date) AS shift_date, employee, CASE WHEN DATE(entry_date) <= '2026-10-20' THEN 10 ELSE LEAST(10, SUM(hours_worked)) END AS shift_hours
+            SELECT DATE(entry_date) AS shift_date, employee, LEAST(10, MAX(COALESCE(hours_worked, 10))) AS shift_hours
             FROM {$production}
             WHERE department = %s AND entry_date BETWEEN %s AND %s
               AND WEEKDAY(entry_date) BETWEEN 0 AND 4
@@ -2257,6 +2282,7 @@ function tlk_get_department_targets() {
         'Pouring' => 60,
         'Machining' => 60,
         'Assembly & Packaging' => 60,
+        'Flex Rock' => 60,
     );
 
     $saved = get_option('tlk_department_targets', array());
@@ -2277,7 +2303,7 @@ function tlk_get_department_target($department) {
  * This only controls display; it does not remove production history or disable entry logging.
  */
 function tlk_get_visible_frontend_departments() {
-    $all_departments = array('Pouring', 'Machining', 'Assembly & Packaging');
+    $all_departments = array('Pouring', 'Machining', 'Assembly & Packaging', 'Flex Rock');
     $saved = get_option('tlk_visible_frontend_departments', null);
 
     // Existing installs default to showing every department until the setting is saved.
@@ -2292,6 +2318,10 @@ function tlk_department_is_visible_on_frontend($department) {
     return in_array($department, tlk_get_visible_frontend_departments(), true);
 }
 
+function tlk_notes_enabled($department) {
+    $saved = get_option('tlk_notes_departments', array());
+    return !empty($saved[$department]);
+}
 function tlk_advanced_enabled($department) {
     $saved = get_option('tlk_advanced_departments', array());
     return !empty($saved[$department]);
@@ -2307,7 +2337,7 @@ function tlk_save_department_targets() {
 
     check_admin_referer('tlk_save_department_targets');
 
-    $departments = array('Pouring', 'Machining', 'Assembly & Packaging');
+    $departments = array('Pouring', 'Machining', 'Assembly & Packaging', 'Flex Rock');
     $posted = isset($_POST['department_targets']) ? (array) wp_unslash($_POST['department_targets']) : array();
     $targets = tlk_get_department_targets();
 
@@ -2329,6 +2359,11 @@ function tlk_save_department_targets() {
         $modes[$dept] = !empty($_POST['advanced_departments']) && in_array($dept, (array) wp_unslash($_POST['advanced_departments']), true);
     }
     update_option('tlk_advanced_departments', $modes, false);
+    $note_departments = isset($_POST['notes_departments']) ? (array) wp_unslash($_POST['notes_departments']) : array();
+    update_option('tlk_notes_departments', array_fill_keys(array_values(array_intersect($departments, $note_departments)), true), false);
+    if (current_user_can('manage_options')) {
+        update_option('tlk_unlimited_entry_edits', !empty($_POST['tlk_unlimited_entry_edits']) ? '1' : '0', false);
+    }
 
     wp_safe_redirect(add_query_arg(array(
         'page' => 'tlk-employee-performance',
@@ -2398,7 +2433,7 @@ function tlk_get_employee_performance($department, $year, $month) {
         "SELECT p.employee, SUM(CAST(p.qty AS DECIMAL(10,2))) AS produced,
                 (SELECT COALESCE(SUM(sh.h), 0) FROM (
                     SELECT employee, DATE(entry_date) AS workday,
-                           CASE WHEN DATE(entry_date) <= '2026-10-20' THEN 10 ELSE LEAST(10, SUM(hours_worked)) END AS h
+                           LEAST(10, MAX(COALESCE(hours_worked, 10))) AS h
                     FROM {$production}
                     WHERE department = %s AND YEAR(entry_date) = %d AND MONTH(entry_date) = %d
                     GROUP BY employee, DATE(entry_date)
@@ -2674,7 +2709,7 @@ function tlk_get_employee_performance_range($department, $start_date, $end_date)
         "SELECT p.employee,
                 SUM(CAST(p.qty AS DECIMAL(10,2))) AS produced,
                 COUNT(DISTINCT DATE(p.entry_date)) AS active_days,
-                (SELECT COALESCE(SUM(sh.h), 0) FROM (SELECT department, employee, DATE(entry_date) AS workday, CASE WHEN DATE(entry_date) <= '2026-10-20' THEN 10 ELSE LEAST(10, SUM(hours_worked)) END AS h FROM {$production} WHERE entry_date BETWEEN %s AND %s GROUP BY department, employee, DATE(entry_date)) sh WHERE sh.department = %s AND sh.employee = p.employee) AS worked_hours
+                (SELECT COALESCE(SUM(sh.h), 0) FROM (SELECT department, employee, DATE(entry_date) AS workday, LEAST(10, MAX(COALESCE(hours_worked, 10))) AS h FROM {$production} WHERE entry_date BETWEEN %s AND %s GROUP BY department, employee, DATE(entry_date)) sh WHERE sh.department = %s AND sh.employee = p.employee) AS worked_hours
          FROM {$production} p
          WHERE p.department = %s
            AND p.entry_date BETWEEN %s AND %s
@@ -2704,7 +2739,8 @@ function tlk_get_production_daily_breakdown($department, $start_date, $end_date)
     $production = $wpdb->prefix . 'tlk_production';
     return $wpdb->get_results($wpdb->prepare(
         "SELECT DATE(entry_date) AS production_date, employee,
-                SUM(CAST(qty AS DECIMAL(10,2))) AS produced
+                SUM(CAST(qty AS DECIMAL(10,2))) AS produced,
+                LEAST(10, MAX(COALESCE(hours_worked, 10))) AS worked_hours
          FROM {$production}
          WHERE department = %s
            AND entry_date BETWEEN %s AND %s
@@ -2719,7 +2755,7 @@ function tlk_get_production_daily_breakdown($department, $start_date, $end_date)
 function tlk_get_production_weekly_breakdown($department, $start_date, $end_date) {
     global $wpdb;
     $production = $wpdb->prefix . 'tlk_production';
-    return $wpdb->get_results($wpdb->prepare(
+    $weekly = $wpdb->get_results($wpdb->prepare(
         "SELECT YEARWEEK(entry_date, 1) AS year_week,
                 DATE_SUB(DATE(entry_date), INTERVAL WEEKDAY(entry_date) DAY) AS week_start,
                 employee,
@@ -2733,6 +2769,18 @@ function tlk_get_production_weekly_breakdown($department, $start_date, $end_date
          ORDER BY week_start DESC, employee ASC",
         $department, $start_date . ' 00:00:00', $end_date . ' 23:59:59'
     ), ARRAY_A);
+    $daily = tlk_get_production_daily_breakdown($department, $start_date, $end_date);
+    foreach ($weekly as &$week) {
+        $week['worked_hours'] = 0;
+        foreach ($daily as $day) {
+            $week_start = (new DateTimeImmutable($day['production_date']))->modify('monday this week')->format('Y-m-d');
+            if ($week_start === $week['week_start'] && $day['employee'] === $week['employee']) {
+                $week['worked_hours'] += (float) $day['worked_hours'];
+            }
+        }
+    }
+    unset($week);
+    return $weekly;
 }
 
 function tlk_employee_performance_period() {
@@ -2785,7 +2833,7 @@ function tlk_employee_performance_period() {
 function tlk_render_employee_performance_page() {
     global $wpdb;
     if (!tlk_can_manage_employee_performance()) wp_die('You are not allowed to view employee performance.');
-    $departments = array('Pouring','Machining','Assembly & Packaging');
+    $departments = array('Pouring','Machining','Assembly & Packaging','Flex Rock');
     $period = tlk_employee_performance_period();
     $department_targets = tlk_get_department_targets();
     $visible_frontend_departments = tlk_get_visible_frontend_departments();
@@ -3061,7 +3109,7 @@ function tlk_render_employee_performance_page() {
                             }
                             $day_employee_count = count($day_employees);
                             $day_hours = (float) $wpdb->get_var($wpdb->prepare(
-                                "SELECT COALESCE(SUM(shift_hours), 0) FROM (SELECT employee, CASE WHEN DATE(entry_date) <= '2026-10-20' THEN 10 ELSE LEAST(10, SUM(hours_worked)) END AS shift_hours FROM {$wpdb->prefix}tlk_production WHERE department = %s AND DATE(entry_date) = %s AND employee != %s AND employee != '' GROUP BY employee) AS shifts",
+                                "SELECT COALESCE(SUM(shift_hours), 0) FROM (SELECT employee, LEAST(10, MAX(COALESCE(hours_worked, 10))) AS shift_hours FROM {$wpdb->prefix}tlk_production WHERE department = %s AND DATE(entry_date) = %s AND employee != %s AND employee != '' GROUP BY employee) AS shifts",
                                 $department, $item['production_date'], tlk_historical_unassigned_employee()
                             ));
                             $day_expected = $dept_goal * ($day_hours / 10);
@@ -3081,7 +3129,7 @@ function tlk_render_employee_performance_page() {
                 <details style="margin-top:14px;">
                     <summary style="cursor:pointer;font-weight:600;">Weekly Output</summary>
                     <table class="widefat striped" style="margin-top:10px;">
-                        <thead><tr><th>Week Starting</th><th>Employee</th><th>Produced</th></tr></thead>
+                        <thead><tr><th>Week Starting</th><th>Employee</th><th>Produced</th><th>Hours Worked</th><th>Adjusted Goal</th><th>% of Goal</th></tr></thead>
                         <tbody><?php foreach ($weekly as $item): ?><tr>
                             <td><?php echo esc_html(wp_date('M j, Y', strtotime($item['week_start']))); ?></td>
                             <td><?php echo esc_html($item['employee']); ?></td>
@@ -3105,7 +3153,15 @@ function tlk_render_employee_performance_page() {
                         <tbody><?php foreach ($daily as $item): ?><tr>
                             <td><?php echo esc_html(wp_date('D, M j, Y', strtotime($item['production_date']))); ?></td>
                             <td><?php echo esc_html($item['employee']); ?></td>
+                            <?php
+                            $daily_target = tlk_get_employee_target($item['employee'], $department, tlk_get_department_target($department));
+                            $adjusted_goal = $daily_target * ((float) $item['worked_hours'] / 10);
+                            $daily_percent = $adjusted_goal > 0 ? ((float) $item['produced'] / $adjusted_goal) * 100 : 0;
+                            ?>
                             <td><?php echo esc_html(number_format_i18n((float)$item['produced'])); ?></td>
+                            <td><?php echo esc_html(number_format_i18n((float)$item['worked_hours'], 2)); ?></td>
+                            <td><?php echo esc_html(number_format_i18n($adjusted_goal, 1)); ?></td>
+                            <td><?php echo esc_html(number_format_i18n($daily_percent, 1)); ?>%</td>
                         </tr><?php endforeach; ?></tbody>
                     </table>
                 </details>
@@ -3130,10 +3186,15 @@ function tlk_render_employee_performance_page() {
                                 Show on frontend
                             </label>
                             <label style="display:block;margin-top:8px;"><input type="checkbox" name="advanced_departments[]" value="<?php echo esc_attr($target_department); ?>" <?php checked(tlk_advanced_enabled($target_department)); ?>> Enable Advanced entry</label>
+                            <label style="display:block;margin-top:8px;"><input type="checkbox" name="notes_departments[]" value="<?php echo esc_attr($target_department); ?>" <?php checked(tlk_notes_enabled($target_department)); ?>> Enable entry notes</label>
                         </div>
                     <?php endforeach; ?>
                     <button type="submit" class="button button-primary">Save Department Settings</button>
                 </div>
+                <?php if (current_user_can('manage_options')) : ?>
+                <p style="margin:14px 0 0;"><label><input type="checkbox" name="tlk_unlimited_entry_edits" value="1" <?php checked(get_option('tlk_unlimited_entry_edits', '0'), '1'); ?>> <strong>Allow all users to edit their own entries older than 24 hours (only administrators can change this setting)</strong></label></p>
+                <p style="margin:4px 0 0;color:#646970;">Disable this when corrections are finished.</p>
+                <?php endif; ?>
             </form>
             <p style="margin:16px 0 0;color:#50575e;">Per-person goal calculation: each employee counts once for each weekday where they recorded production. Expected period output = per-person daily goal × active person-days. Multiple entries by the same employee on the same date still count as one person-day. Historical / Unassigned production is included in department totals but excluded from employee performance, active person-days, and per-person goal percentages. Saturday and Sunday never count.</p>
         </details>

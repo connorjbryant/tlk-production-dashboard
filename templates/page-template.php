@@ -39,6 +39,9 @@ $on_time = tlk_get_on_time_delivery($current_year, $current_month);
 $current_period = wp_date('F Y', mktime(0, 0, 0, $current_month, 1, $current_year));
 $cnc_performance = tlk_get_department_performance('Machining', $current_year, $current_month);
 $pouring_performance = tlk_get_department_performance('Pouring', $current_year, $current_month);
+$flex_performance = tlk_get_department_performance('Flex Rock', $current_year, $current_month);
+$flex_quota = tlk_department_quota('Flex Rock');
+$flex_percent = isset($flex_performance['percent']) ? min(100, round($flex_performance['percent'])) : 0;
 $shipping_performance = tlk_get_department_performance('Assembly & Packaging', $current_year, $current_month);
 $shipping_quota = tlk_department_quota('Assembly & Packaging');
 $shipping_percent = min(100, (int) round($shipping_performance['percent']));
@@ -137,6 +140,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                         <option value="Pouring">Pouring</option>
                         <option value="Machining">Machining</option>
                         <option value="Assembly &amp; Packaging">Assembly &amp; Packaging</option>
+                        <option value="Flex Rock">Flex Rock</option>
                     </select>
                 </div>
 
@@ -151,7 +155,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
 
             </div>
 
-            <script type="application/json" id="tlk-entry-settings"><?php echo wp_json_encode(array('enabled' => get_option('tlk_advanced_departments', array()), 'parts' => array_combine(array('Pouring','Machining','Assembly & Packaging'), array_map('tlk_saved_parts', array('Pouring','Machining','Assembly & Packaging'))))); ?></script>
+            <script type="application/json" id="tlk-entry-settings"><?php echo wp_json_encode(array('enabled' => get_option('tlk_advanced_departments', array()), 'notes' => get_option('tlk_notes_departments', array()), 'parts' => array_combine(array('Pouring','Machining','Assembly & Packaging','Flex Rock'), array_map('tlk_saved_parts', array('Pouring','Machining','Assembly & Packaging','Flex Rock'))))); ?></script>
             <div class="production-entry-list" id="production-entry-list">
                 <div class="production-entry-row">
                     <div class="production-entry-field">
@@ -172,6 +176,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                     </div>
 
                     <div class="production-entry-field"><label>Hours worked:</label><input type="number" name="hours_worked[]" min="1" max="10" step="1" value="10" required></div>
+                <div class="production-entry-field tlk-entry-notes" hidden><label>Notes (optional):</label><textarea name="entry_notes[]" rows="2" disabled></textarea></div>
                 <div class="tlk-advanced-parts" hidden><label>Part name / Quantity produced</label><div class="tlk-part-lines"></div><button type="button" class="tlk-add-part">+ Add another part</button></div>
                 <button type="button" class="production-remove-row" aria-label="Remove employee entry">Remove</button>
                 </div>
@@ -204,6 +209,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                     <label>Hours worked:</label>
                     <input type="number" name="hours_worked[]" min="1" max="10" step="1" value="10" required>
                 </div>
+                <div class="production-entry-field tlk-entry-notes" hidden><label>Notes (optional):</label><textarea name="entry_notes[]" rows="2" disabled></textarea></div>
                 <div class="tlk-advanced-parts" hidden><label>Part name / Quantity produced</label><div class="tlk-part-lines"></div><button type="button" class="tlk-add-part">+ Add another part</button></div>
                 <button type="button" class="production-remove-row" aria-label="Remove employee entry">Remove</button>
             </div>
@@ -214,7 +220,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
         <div class="recent-entries__header">
             <div>
                 <h2>My Recent Entries</h2>
-                <p>Entries you submit can be corrected for 24 hours.</p>
+                <p><?php echo tlk_unlimited_entry_edits_enabled() ? 'Editing override active: you can edit your historical entries.' : 'Entries you submit can be corrected for 24 hours.'; ?></p>
             </div>
         </div>
 
@@ -251,7 +257,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                             <span class="recent-entry__meta">
                                 <?php echo esc_html(
                                     wp_date(
-                                        'M j, g:i a',
+                                        'D, M j, g:i a',
                                         $entry_time->getTimestamp()
                                     )
                                 ); ?>
@@ -260,6 +266,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                         </summary>
 
                         <div class="recent-entry__edit">
+                            <?php if (!tlk_unlimited_entry_edits_enabled()) : ?>
                             <p class="recent-entry__expires">
                                 Editable until
                                 <strong>
@@ -271,6 +278,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                                     ); ?>
                                 </strong>
                             </p>
+                            <?php endif; ?>
 
                             <form
                                 action="<?php echo esc_url(admin_url('admin-post.php')); ?>"
@@ -310,6 +318,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                                         <option value="Machining" <?php selected($entry['department'], 'Machining'); ?>>Machining</option>
                                         <option value="Pouring" <?php selected($entry['department'], 'Pouring'); ?>>Pouring</option>
                                         <option value="Assembly &amp; Packaging" <?php selected($entry['department'], 'Assembly & Packaging'); ?>>Assembly &amp; Packaging</option>
+                                        <option value="Flex Rock" <?php selected($entry['department'], 'Flex Rock'); ?>>Flex Rock</option>
                                     </select>
                                 </div>
 
@@ -341,6 +350,9 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                                 </div>
 
                                 <div class="recent-entry__field"><label>Hours worked</label><input type="number" name="hours_worked" min="1" max="10" step="1" value="<?php echo esc_attr(isset($entry['hours_worked']) ? $entry['hours_worked'] : 10); ?>" required></div>
+                                <div class="recent-entry__field tlk-edit-notes" data-notes-enabled="<?php echo esc_attr(wp_json_encode(get_option('tlk_notes_departments', array()))); ?>" <?php if (!tlk_notes_enabled($entry['department'])) echo 'hidden'; ?>>
+                                    <label>Notes (optional)</label><textarea name="entry_notes" rows="3" <?php disabled(!tlk_notes_enabled($entry['department'])); ?>><?php echo esc_textarea($entry['entry_notes'] ?? ''); ?></textarea>
+                                </div>
                                 <button type="submit" class="recent-entry__save">
                                     Save Changes
                                 </button>
@@ -397,6 +409,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                 array('name' => 'Pouring', 'quota' => $pouring_quota, 'performance' => $pouring_performance, 'percent' => $pouring_percent),
                 
                 array('name' => 'Assembly & Packaging', 'quota' => $shipping_quota, 'performance' => $shipping_performance, 'percent' => $shipping_percent),
+                array('name' => 'Flex Rock', 'quota' => $flex_quota, 'performance' => $flex_performance, 'percent' => $flex_percent),
             );
 
             $departments = array_values(array_filter($departments, function ($department) {
@@ -423,8 +436,8 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                 $background_files = array(
                     'Machining' => 'machining.jpg',
                     'Pouring' => 'pouring.jpg',
-                    
                     'Assembly & Packaging' => 'assembly_packaging.jpg',
+                    'Flex Rock' => 'flex_rock.jpg',
                 );
                 $background_file = $background_files[$department['name']] ?? 'building.jpg';
                 $department_background_url = plugin_dir_url(dirname(__FILE__)) . 'images/' . $background_file;
@@ -461,7 +474,7 @@ $selectedBg = plugin_dir_url(dirname(__FILE__)) . 'images/' . $currentMonth . '.
                     </div>
 
                     <?php if ($single_department_card) : ?>
-                        <?php $department_image = $department['name'] === 'Machining' ? 'machining.jpg' : ($department['name'] === 'Pouring' ? 'pouring.jpg' : ($department['name'] === 'Assembly & Packaging' ? 'assembly_packaging.jpg' : 'building.jpg')); ?>
+                        <?php $department_image = $background_file; ?>
                         <div class="tlk-production-card__image-wrap" aria-hidden="true">
                             <img
                                 class="tlk-production-card__image"
