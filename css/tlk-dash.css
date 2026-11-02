@@ -190,12 +190,16 @@ body:not(.logged-in).tlk-prod-dash .site-content {
 }
 
 .dash-container__form {
+  max-width: 80%;
+  margin: 0 auto;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
 
 .dash-container__recent-entries {
   border-top: 1px solid lightgray;
+  max-width: 80%;
+  margin: 0 auto;
 }
 
 .dash-container__form form {
@@ -498,6 +502,11 @@ body:not(.logged-in).tlk-prod-dash .site-content {
 .tlk-internal-tools {
   width: 100%;
   background-color: var(--tlk-panel-soft);
+}
+
+.tlk-internal-tools {
+  max-width: 80%;
+  margin: 0 auto;
 }
 
 .tlk-stats-section {
