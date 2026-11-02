@@ -2,7 +2,7 @@
 /**
  * Plugin Name: TLK Production Dashboard
  * Description: Production dashboard for TLK Precision
- * Version: 4.0.3
+ * Version: 4.0.4
  * License: GPL-2.0+
  */
 
@@ -23,7 +23,7 @@ function tlk_dash_enqueue_assets(){
         return;
     }
 
-    $version = '4.0.3';
+    $version = '4.0.4';
 
     wp_enqueue_style(
         'tlk_dash_styles',
@@ -755,9 +755,9 @@ function handle_production_form_submission() {
             }
         }
 
-        $hours_raw = isset($hours[$index]) ? $hours[$index] : '10';
-        if (!is_numeric($hours_raw) || (float) $hours_raw <= 0 || (float) $hours_raw > 24) {
-            wp_die('Hours worked must be greater than 0 and no more than 24.');
+        $hours_raw = isset($hours[$index]) ? $hours[$index] : '';
+        if (!is_numeric($hours_raw) || (float) $hours_raw <= 0 || (float) $hours_raw > 10) {
+            wp_die('Hours worked must be greater than 0 and no more than 10.');
         }
         $worked = round((float) $hours_raw, 2);
         $qty = absint($qty_raw);
@@ -908,9 +908,9 @@ function tlk_handle_production_entry_update() {
         ? absint($_POST['qty'])
         : 0;
 
-    $hours_raw = isset($_POST['hours_worked']) ? wp_unslash($_POST['hours_worked']) : '10';
-    if (!is_numeric($hours_raw) || (float) $hours_raw <= 0 || (float) $hours_raw > 24) {
-        wp_die('Hours worked must be greater than 0 and no more than 24.');
+    $hours_raw = isset($_POST['hours_worked']) ? wp_unslash($_POST['hours_worked']) : '';
+    if (!is_numeric($hours_raw) || (float) $hours_raw <= 0 || (float) $hours_raw > 10) {
+        wp_die('Hours worked must be greater than 0 and no more than 10.');
     }
     $worked = round((float) $hours_raw, 2);
     if (!$entry_id || $department === '' || $employee === '') {
