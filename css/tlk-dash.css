@@ -189,6 +189,11 @@ body:not(.logged-in).tlk-prod-dash .site-content {
   box-shadow: var(--tlk-shadow);
 }
 
+.dash-container__form {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .dash-container__recent-entries {
   border-top: 1px solid lightgray;
 }
