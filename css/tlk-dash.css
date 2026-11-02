@@ -197,9 +197,27 @@ body:not(.logged-in).tlk-prod-dash .site-content {
 }
 
 .dash-container__recent-entries {
+  position: relative;
   border-top: 1px solid lightgray;
   max-width: 80%;
   margin: 0 auto;
+  z-index: 1;
+}
+
+.dash-container__recent-entries::after {
+  position: absolute;
+  content: "";
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100vw;
+  height: 100%;
+  background: linear-gradient(
+    to top,
+    rgb(255, 255, 255) 0%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  z-index: -1;
 }
 
 .dash-container__form form {
